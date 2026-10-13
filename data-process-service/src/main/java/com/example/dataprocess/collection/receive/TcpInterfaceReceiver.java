@@ -21,6 +21,14 @@ public final class TcpInterfaceReceiver implements CollectInterfaceReceiver {
     private final TcpTool.TcpServer server;
     /** 当前接口对应的协议会话。 */
     private final ProtocolHandler.TcpSession protocolSession;
+    /** 接收异常复用异步告警组件，由接口管理器在提交前注入。 */
+    private com.example.dataprocess.service.DataAlarmRecorder alarmRecorder;
+    public void setAlarmRecorder(com.example.dataprocess.service.DataAlarmRecorder recorder) { this.alarmRecorder = recorder; }
+    private void recordFailure(String detail) {
+        if (alarmRecorder != null) {
+            alarmRecorder.record(config, com.example.common.enums.DataAlarmType.COLLECTION_RECEIVE, detail);
+        }
+    }
     /** 是否继续接收连接和数据。 */
     private volatile boolean running = true;
     /** 当前正在接收的客户端连接。 */
@@ -71,12 +79,14 @@ public final class TcpInterfaceReceiver implements CollectInterfaceReceiver {
                 protocolSession.receive(connection, () -> running);
             } catch (IOException exception) {
                 if (running) {
+                    recordFailure("TCP发送方连接异常结束，监听继续等待连接：" + exception.getMessage());
                     LOGGER.warn("TCP采集连接已结束，接口编号：{}，原因：{}",
                             config.getInterfaceId(), exception.getMessage());
                 }
             } catch (RuntimeException exception) {
                 if (running) {
                     // 当前连接的协议内容异常时关闭连接，监听服务继续等待下一连接。
+                    recordFailure("TCP协议流失败，当前连接关闭：" + exception.getMessage());
                     LOGGER.warn("TCP协议流处理失败，接口编号：{}，原因：{}",
                             config.getInterfaceId(), exception.getMessage());
                 }

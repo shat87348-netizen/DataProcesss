@@ -69,7 +69,7 @@ public final class BusinessEnums {
 
     /** 采集接口传输协议。 */
     public enum TransferProtocol implements LabeledEnum {
-        JSON(1, "JSON"), PDXP(2, "PDXP"), PROTOBUF(3, "Protobuf"), FEP(4, "FEP");
+        JSON(1, "JSON"), PDXP(2, "PDXP"), FEP(3, "FEP");
         private final int value;
         private final String label;
         TransferProtocol(int value, String label) { this.value = value; this.label = label; }
@@ -77,9 +77,9 @@ public final class BusinessEnums {
         public String getLabel() { return label; }
     }
 
-    /** 采集接口运行状态。 */
+    /** 根据启用开关展示的采集接口在线状态。 */
     public enum InterfaceStatus implements LabeledEnum {
-        OFFLINE(0, "离线"), ONLINE(1, "在线"), ABNORMAL(2, "异常");
+        OFFLINE(0, "离线"), ONLINE(1, "在线");
         private final int value;
         private final String label;
         InterfaceStatus(int value, String label) { this.value = value; this.label = label; }
@@ -164,16 +164,6 @@ public final class BusinessEnums {
         public String getLabel() { return label; }
     }
 
-    /** 校准通道类型。 */
-    public enum ChannelType implements LabeledEnum {
-        TEMPERATURE(1, "温度传感器"), VOLTAGE(2, "电压传感器"), CURRENT(3, "电流传感器"), POWER(4, "功率传感器"), ATTITUDE(5, "姿态传感器");
-        private final int value;
-        private final String label;
-        ChannelType(int value, String label) { this.value = value; this.label = label; }
-        public Object getValue() { return value; }
-        public String getLabel() { return label; }
-    }
-
     /** 野值检测方法。 */
     public enum DetectMethod implements LabeledEnum {
         WRIGHT(1, "莱特准则"), THRESHOLD(2, "阈值法"), CHAUVENET(3, "肖维涅法");
@@ -196,7 +186,7 @@ public final class BusinessEnums {
 
     /** 数据告警级别。 */
     public enum DataAlarmLevel implements LabeledEnum {
-        NOTICE(1, "提示"), GENERAL(2, "一般"), MINOR(3, "轻微"), SERIOUS(4, "严重"), EMERGENCY(5, "紧急");
+        GENERAL(2, "一般"), SERIOUS(4, "严重");
         private final int value;
         private final String label;
         DataAlarmLevel(int value, String label) { this.value = value; this.label = label; }
@@ -206,7 +196,7 @@ public final class BusinessEnums {
 
     /** 系统告警级别。 */
     public enum SystemAlarmLevel implements LabeledEnum {
-        NOTICE(1, "提示"), GENERAL(2, "一般"), SERIOUS(3, "严重");
+        GENERAL(2, "一般"), SERIOUS(3, "严重");
         private final int value;
         private final String label;
         SystemAlarmLevel(int value, String label) { this.value = value; this.label = label; }

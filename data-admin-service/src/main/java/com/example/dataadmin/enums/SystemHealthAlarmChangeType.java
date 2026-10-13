@@ -1,14 +1,9 @@
 package com.example.dataadmin.enums;
-
-/** 系统健康告警在一次监控采集中发生的变化类型。 */
-public enum SystemHealthAlarmChangeType {
-
-    /** 新产生一条未恢复告警。 */
-    CREATED,
-
-    /** 已存在的未恢复告警持续触发，当前值和触发次数已更新。 */
-    UPDATED,
-
-    /** 指标恢复正常，原告警已关闭。 */
-    RECOVERED
+/** 系统告警推送变化类型，编码保持原订阅协议兼容。 */
+public enum SystemHealthAlarmChangeType implements LabeledEnum {
+    CREATED("新增"), UPDATED("持续触发"), RECOVERED("已恢复");
+    private final String label;
+    SystemHealthAlarmChangeType(String label) { this.label = label; }
+    public Object getValue() { return name(); }
+    public String getLabel() { return label; }
 }

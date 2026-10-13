@@ -3,6 +3,7 @@ package com.example.dataadmin.service.impl;
 import com.example.common.response.PageResult;
 import com.example.dataadmin.entity.*;
 import com.example.dataadmin.enums.SystemLogLevel;
+import com.example.dataadmin.enums.SystemLogSource;
 import com.example.dataadmin.mapper.*;
 import com.example.dataadmin.service.SystemLogService;
 import com.github.pagehelper.PageHelper;
@@ -43,6 +44,8 @@ public class SystemLogServiceImpl implements SystemLogService {
             Integer pageSize) {
         validateQuery(taskId, startTime, endTime);
         String normalizedLevel = SystemLogLevel.normalize(logLevel);
+        // 筛选来源只接受枚举编码，中文名称仅由查询结果提供。
+        String normalizedSource = SystemLogSource.normalize(logSource);
         int safePageNum = pageNum == null ? 1 : Math.max(1, pageNum);
         int safePageSize = pageSize == null ? 20
                 : Math.min(100, Math.max(1, pageSize));
@@ -52,7 +55,7 @@ public class SystemLogServiceImpl implements SystemLogService {
         List<SysRuntimeLog> records = logMapper.findAll(
                 taskId,
                 normalizedLevel,
-                trimToNull(logSource),
+                normalizedSource,
                 trimToNull(operatorId),
                 trimToNull(keyword),
                 startTime,
@@ -64,13 +67,6 @@ public class SystemLogServiceImpl implements SystemLogService {
                 pageInfo.getPageSize(),
                 pageInfo.getTotal(),
                 records);
-    }
-
-    /** 查询日志来源下拉选项。 */
-    @Override
-    public List<String> listLogSources(String taskId) {
-        validateTaskId(taskId);
-        return logMapper.findSourceNames(taskId);
     }
 
     /** 查询指定试验任务的系统运行日志。 */
@@ -96,14 +92,16 @@ public class SystemLogServiceImpl implements SystemLogService {
         if (normalizedLevel == null) {
             throw new IllegalArgumentException("日志级别不能为空");
         }
-        if (trimToNull(log.getLogSource()) == null) {
+        // 内部录入也校验来源编码，避免绕过统一操作日志组件写入中文来源。
+        String normalizedSource = SystemLogSource.normalize(log.getLogSource());
+        if (normalizedSource == null) {
             throw new IllegalArgumentException("日志来源不能为空");
         }
         if (trimToNull(log.getLogContent()) == null) {
             throw new IllegalArgumentException("日志内容不能为空");
         }
         log.setLogLevel(normalizedLevel);
-        log.setLogSource(log.getLogSource().trim());
+        log.setLogSource(normalizedSource);
         log.setLogContent(log.getLogContent().trim());
         if (log.getLogTime() == null) {
             log.setLogTime(LocalDateTime.now());
@@ -121,6 +119,14 @@ public class SystemLogServiceImpl implements SystemLogService {
         }
         if (log.getLogLevel() != null) {
             log.setLogLevel(SystemLogLevel.normalize(log.getLogLevel()));
+        }
+        // 内部更新只能保存已声明的来源编码，未提供来源时保持原值。
+        if (log.getLogSource() != null) {
+            String normalizedSource = SystemLogSource.normalize(log.getLogSource());
+            if (normalizedSource == null) {
+                throw new IllegalArgumentException("日志来源不能为空");
+            }
+            log.setLogSource(normalizedSource);
         }
         return logMapper.update(log) > 0;
     }

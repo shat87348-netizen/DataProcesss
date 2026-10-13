@@ -23,8 +23,6 @@ public interface SystemLogService {
             LocalDateTime endTime,
             Integer pageNum,
             Integer pageSize);
-    /** 查询日志来源下拉选项。 */
-    List<String> listLogSources(String taskId);
     /** 查询指定试验任务的系统运行日志。 */
     List<SysRuntimeLog> listLogs(String taskId);
     /** 查询系统运行日志详情。 */

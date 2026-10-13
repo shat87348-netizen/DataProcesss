@@ -273,9 +273,6 @@ public class DataCalibrationServiceImpl implements DataCalibrationService {
         if (source.getChannelName() != null) {
             target.setChannelName(source.getChannelName());
         }
-        if (source.getChannelType() != null) {
-            target.setChannelType(source.getChannelType());
-        }
         if (source.getCalibrationFormula() != null) {
             target.setCalibrationFormula(source.getCalibrationFormula());
         }
@@ -334,20 +331,23 @@ public class DataCalibrationServiceImpl implements DataCalibrationService {
         if (config.getCalibrationFormula().length() > 100) {
             throw new IllegalArgumentException("校准公式不能超过100个字符");
         }
-        if (EnumData.labelOf(BusinessEnums.ChannelType.values(),
-                config.getChannelType()) == null) {
-            throw new IllegalArgumentException("通道类型只能为1至5");
-        }
-        if (config.getNormalRange() == null || config.getNormalRange().isEmpty()) {
-            throw new IllegalArgumentException("正常范围不能为空");
-        }
-        if (config.getNormalRange().length() > 50) {
-            throw new IllegalArgumentException("正常范围不能超过50个字符");
-        }
-        validateNormalRange(config.getNormalRange());
         if (EnumData.labelOf(BusinessEnums.DetectMethod.values(),
                 config.getDetectMethod()) == null) {
             throw new IllegalArgumentException("野值检测方法只能为1、2或3");
+        }
+
+        // 正常范围仅阈值法必填，其他算法允许不配置；传入有效文本时统一校验。
+        String normalRange = config.getNormalRange();
+        boolean hasNormalRange = normalRange != null && !normalRange.isEmpty();
+        if (BusinessEnums.DetectMethod.THRESHOLD.getValue().equals(config.getDetectMethod())
+                && !hasNormalRange) {
+            throw new IllegalArgumentException("阈值法正常范围不能为空");
+        }
+        if (hasNormalRange) {
+            if (normalRange.length() > 50) {
+                throw new IllegalArgumentException("正常范围不能超过50个字符");
+            }
+            validateNormalRange(normalRange);
         }
 
         // 按所选算法校验当前实际生效的参数。

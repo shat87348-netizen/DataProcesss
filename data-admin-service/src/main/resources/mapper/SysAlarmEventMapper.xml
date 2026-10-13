@@ -1,74 +1,46 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.example.dataadmin.mapper.SysAlarmEventMapper">
-
-    <!-- 公共查询字段。 -->
-    <sql id="columns">id, alarm_time, obj_name, alarm_type, alarm_content, alarm_level, alarm_status, is_deleted, create_time, update_time</sql>
-
-    <!-- 查询系统告警列表。 -->
-    <select id="findAll" resultType="com.example.dataadmin.entity.SysAlarmEvent">
-        select <include refid="columns"/> from sys_alarm_event
-        where is_deleted = 0
-        order by id
-    </select>
-
-    <!-- 按主键查询详情。 -->
-    <select id="findById" resultType="com.example.dataadmin.entity.SysAlarmEvent">
-        select <include refid="columns"/> from sys_alarm_event where id = #{id} and is_deleted = 0
-    </select>
-
-    <!-- 新增记录并通过序列生成主键。 -->
+    <sql id="columns">id, alarm_time, obj_name, alarm_type, metric_code, alarm_level, alarm_content, alarm_status, is_deleted, current_value, threshold_value, first_alarm_time, last_alarm_time, recover_time, trigger_count, create_time, update_time</sql>
     <insert id="insert">
+        <!-- 回填主键，保证新告警通过 WebSocket 推送时前端能够立即获得事件 ID。 -->
         <selectKey keyProperty="id" resultType="long" order="BEFORE">
             select nextval('sys_alarm_event_id_seq')
         </selectKey>
         insert into sys_alarm_event
-        <trim prefix="(" suffix=")" suffixOverrides=",">
-            id,
-            <if test="alarmTime != null">alarm_time,</if>
-            <if test="objName != null">obj_name,</if>
-            <if test="alarmType != null">alarm_type,</if>
-            <if test="alarmContent != null">alarm_content,</if>
-            <if test="alarmLevel != null">alarm_level,</if>
-            <if test="alarmStatus != null">alarm_status,</if>
-            <if test="isDeleted != null">is_deleted,</if>
-        </trim>
+        (id, alarm_time, obj_name, alarm_type, metric_code, alarm_level,
+         alarm_content, alarm_status, is_deleted, current_value, threshold_value,
+         first_alarm_time, last_alarm_time, trigger_count)
         values
-        <trim prefix="(" suffix=")" suffixOverrides=",">
-            #{id},
-            <if test="alarmTime != null">#{alarmTime},</if>
-            <if test="objName != null">#{objName},</if>
-            <if test="alarmType != null">#{alarmType},</if>
-            <if test="alarmContent != null">#{alarmContent},</if>
-            <if test="alarmLevel != null">#{alarmLevel},</if>
-            <if test="alarmStatus != null">#{alarmStatus},</if>
-            <if test="isDeleted != null">#{isDeleted},</if>
-        </trim>
+        (#{id}, #{alarmTime}, #{objName}, #{alarmType}, #{metricCode}, #{alarmLevel},
+         #{alarmContent}, 0, 0, #{currentValue}, #{thresholdValue},
+         #{firstAlarmTime}, #{lastAlarmTime}, 1)
     </insert>
-
-    <!-- 按主键更新非空字段。 -->
-    <update id="update">
+    <select id="findOpen" resultType="com.example.dataadmin.entity.SysAlarmEvent">
+        select <include refid="columns"/> from sys_alarm_event
+        where is_deleted = 0 and metric_code = #{metricCode}
+          and alarm_status = 0
+        order by id desc limit 1
+    </select>
+    <select id="findAll" resultType="com.example.dataadmin.entity.SysAlarmEvent">
+        select <include refid="columns"/> from sys_alarm_event
+        <where>
+            is_deleted = 0
+            <if test="alarmStatus != null">and alarm_status = #{alarmStatus}</if>
+        </where>
+        order by coalesce(last_alarm_time, alarm_time) desc, id desc
+    </select>
+    <update id="updateActive">
         update sys_alarm_event
-        <set>
-            <if test="alarmTime != null">alarm_time = #{alarmTime},</if>
-            <if test="objName != null">obj_name = #{objName},</if>
-            <if test="alarmType != null">alarm_type = #{alarmType},</if>
-            <if test="alarmContent != null">alarm_content = #{alarmContent},</if>
-            <if test="alarmLevel != null">alarm_level = #{alarmLevel},</if>
-            <if test="alarmStatus != null">alarm_status = #{alarmStatus},</if>
-            update_time = current_timestamp,
-        </set>
+        set current_value = #{currentValue}, last_alarm_time = #{lastAlarmTime},
+            alarm_level = #{alarmLevel}, alarm_content = #{alarmContent},
+            trigger_count = trigger_count + 1, update_time = current_timestamp
         where id = #{id} and is_deleted = 0
     </update>
-
-    <!-- 删除记录；包含逻辑删除字段的表执行逻辑删除。 -->
-    <update id="delete">
-        update sys_alarm_event set is_deleted = 1, update_time = current_timestamp where id = #{id} and is_deleted = 0
+    <update id="recoverById">
+        update sys_alarm_event
+        set alarm_status = 1, recover_time = #{recoverTime},
+            update_time = current_timestamp
+        where id = #{id} and is_deleted = 0 and alarm_status = 0
     </update>
-
-    <!-- 更新业务状态。 -->
-    <update id="updateStatus">
-        update sys_alarm_event set alarm_status = #{alarmStatus}, update_time = current_timestamp where id = #{id} and is_deleted = 0
-    </update>
-
 </mapper>

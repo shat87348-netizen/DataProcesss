@@ -30,6 +30,16 @@ import java.util.regex.Pattern;
 /** 使用校准通道规则检测遥测野值，并把样本写入缓存。 */
 @Service
 public class CalibrationProcessingServiceImpl implements CalibrationProcessingService {
+    /** 告警组件采用独立注入，复用已有离线构造入口。 */
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.example.dataprocess.service.DataAlarmRecorder alarmRecorder;
+
+    /** 提交异常上下文，采集线程不直接写数据库。 */
+    private void alarm(com.example.dataprocess.entity.CollectInterfaceRuntimeConfig config,
+            com.example.common.enums.DataAlarmType type, String detail) {
+        if (alarmRecorder != null) { alarmRecorder.record(config, type, detail); }
+    }
+
 
     /** 校准处理日志。 */
     private static final Logger LOGGER = LoggerFactory.getLogger(
@@ -83,8 +93,17 @@ public class CalibrationProcessingServiceImpl implements CalibrationProcessingSe
             Telemetry telemetry = entry.getValue();
             CalibrationChannelRuntimeConfig config = configs.get(
                     trimmed(telemetry.getCalibrationFormula()));
-            Telemetry processed = config == null ? telemetry : processTelemetry(
-                    interfaceConfig, config, message, telemetry);
+            Telemetry processed;
+            try {
+                processed = config == null ? telemetry : processTelemetry(interfaceConfig, config, message, telemetry);
+            } catch (Exception exception) {
+                if (alarmRecorder != null) {
+                    alarmRecorder.record(interfaceConfig, com.example.common.enums.DataAlarmType.CALIBRATION_RULE,
+                            telemetry.getTmSymbol(), telemetry.getTmName(), config == null ? null : config.getId(),
+                            telemetry.getCalibrationFormula(), "校准判定失败：" + exception.getMessage());
+                }
+                throw new com.example.dataprocess.service.RecordedDataAlarmException("校准判定失败", exception);
+            }
             result.putTelemetries(entry.getKey(), processed);
         }
         return result.build();
@@ -100,7 +119,7 @@ public class CalibrationProcessingServiceImpl implements CalibrationProcessingSe
         String telemetryCode = telemetry.getTmSymbol();
         String effectiveKey = CalibrationRedisKeys.effectiveSamples(
                 taskId, config.getCalibrationFormula(), telemetryCode);
-        List<Double> baseline = readValues(effectiveKey, requiredSamples(config));
+        List<Double> baseline = readValues(interfaceConfig, effectiveKey, requiredSamples(config));
         DetectionResult detection = detect(config, baseline, telemetry.getValue());
         int cleaned = detection.outlier
                 && Integer.valueOf(YES).equals(config.getAutoClean())
@@ -108,7 +127,16 @@ public class CalibrationProcessingServiceImpl implements CalibrationProcessingSe
         CalibrationSample sample = sample(
                 taskId, config, telemetryCode, message, telemetry,
                 detection.outlier, cleaned);
-        cacheEffectiveSample(config, sample, effectiveKey, baseline.size());
+        cacheEffectiveSample(interfaceConfig, config, sample, effectiveKey, baseline.size());
+        if (alarmRecorder != null) {
+            if (detection.outlier) {
+                alarmRecorder.record(interfaceConfig, com.example.common.enums.DataAlarmType.CALIBRATION_OUTLIER,
+                        telemetryCode, telemetry.getTmName(), config.getId(), config.getCalibrationFormula(), detection.detail);
+            } else {
+                alarmRecorder.recover(interfaceConfig, com.example.common.enums.DataAlarmType.CALIBRATION_OUTLIER,
+                        telemetryCode, config.getId());
+            }
+        }
         if (detection.outlier) {
             cacheRecordDetail(
                     interfaceConfig, config, message, telemetry, detection.detail);
@@ -268,7 +296,7 @@ public class CalibrationProcessingServiceImpl implements CalibrationProcessingSe
     }
 
     /** 从有效样本缓存读取最近的统计基线。 */
-    private List<Double> readValues(String key, int limit) {
+    private List<Double> readValues(CollectInterfaceRuntimeConfig interfaceConfig, String key, int limit) {
         try {
             Set<String> jsonValues = redisTemplate.opsForZSet().range(
                     key, -Math.max(limit, 1), -1);
@@ -283,6 +311,7 @@ public class CalibrationProcessingServiceImpl implements CalibrationProcessingSe
             }
             return result;
         } catch (Exception exception) {
+            alarm(interfaceConfig, com.example.common.enums.DataAlarmType.CALIBRATION_CACHE, "有效样本读取失败，当前检测无法取得完整基线：" + exception.getMessage());
             LOGGER.error("读取校准样本缓存失败，缓存键：{}", key, exception);
             return Collections.emptyList();
         }
@@ -290,6 +319,7 @@ public class CalibrationProcessingServiceImpl implements CalibrationProcessingSe
 
     /** 保存后续检测需要使用的有效样本。 */
     private void cacheEffectiveSample(
+            CollectInterfaceRuntimeConfig interfaceConfig,
             CalibrationChannelRuntimeConfig config,
             CalibrationSample sample,
             String effectiveKey,
@@ -303,6 +333,7 @@ public class CalibrationProcessingServiceImpl implements CalibrationProcessingSe
                 redisTemplate.expire(effectiveKey, cacheDays, TimeUnit.DAYS);
             }
         } catch (Exception exception) {
+            alarm(interfaceConfig, com.example.common.enums.DataAlarmType.CALIBRATION_CACHE, "有效样本保存失败；参数：" + sample.getTelemetryCode() + "；原因：" + exception.getMessage());
             LOGGER.error("保存校准有效样本缓存失败，校准公式：{}，遥测代号：{}",
                     sample.getCalibrationFormula(), sample.getTelemetryCode(), exception);
         }
@@ -330,6 +361,8 @@ public class CalibrationProcessingServiceImpl implements CalibrationProcessingSe
             redisTemplate.opsForList().rightPush(
                     CalibrationRedisKeys.PENDING_QUEUE, json);
         } catch (Exception exception) {
+            alarm(interfaceConfig, com.example.common.enums.DataAlarmType.CALIBRATION_CACHE,
+                    "校准通道ID：" + config.getId() + "；参数：" + telemetry.getTmSymbol() + "；野值详情未进入缓存：" + exception.getMessage());
             LOGGER.error("保存校准野值详情缓存失败，校准通道ID：{}，遥测代号：{}",
                     config.getId(), telemetry.getTmSymbol(), exception);
         }

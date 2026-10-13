@@ -65,7 +65,7 @@ public class DashboardServiceImpl implements DashboardService {
     CollectionDashboardVO.Summary summary = result.getSummary();
     summary.setCollectionCount(sum(totals));
     summary.setSenderCount(result.getTable().size());
-    summary.setOnlineAgentCount(onlineInterfaceCount(interfaces, realtime));
+    summary.setOnlineAgentCount(onlineInterfaceCount(interfaces));
     summary.setInterfaceRateKbps(round(collectionInterfaceRate(realtime)));
     return result;
   }
@@ -196,8 +196,8 @@ public class DashboardServiceImpl implements DashboardService {
       group.protocols.add(protocol(config.getTransferType()));
       RealtimeCollectionMetric metric = realtime.get(config.getId());
       group.interfaceRateKbps += zero(metric == null ? null : metric.getInterfaceRateKbps());
-      int status = metric == null || metric.getStatus() == null ? zero(config.getStatus()) : metric.getStatus();
-      group.addStatus(status);
+      // 在线状态只取配置启用开关，Redis仍用于读取速率等实时指标。
+      group.addStatus(config.getStatus());
     }
     long total = sum(totals);
     List<CollectionDashboardVO.TableRow> result = new ArrayList<>();
@@ -259,14 +259,12 @@ public class DashboardServiceImpl implements DashboardService {
     return result;
   }
 
-  /** 统计Redis实时指标中的在线采集接口数量。 */
-  private long onlineInterfaceCount(List<CollectInterfaceConfig> interfaces,
-      Map<Long, RealtimeCollectionMetric> realtime) {
+  /** 按启用开关统计在线采集接口数量。 */
+  private long onlineInterfaceCount(List<CollectInterfaceConfig> interfaces) {
     long count = 0;
     for (CollectInterfaceConfig config : interfaces) {
-      RealtimeCollectionMetric metric = realtime.get(config.getId());
-      int status = metric == null || metric.getStatus() == null ? zero(config.getStatus()) : metric.getStatus();
-      if (status == 1) { count++; }
+      // 与接口列表使用同一状态派生规则，避免实时缓存滞后影响在线数量。
+      if (config.getStatus() == 1) { count++; }
     }
     return count;
   }
@@ -345,15 +343,15 @@ public class DashboardServiceImpl implements DashboardService {
   private static class SenderAggregation {
     private int interfaceCount;
     private int online;
-    private int offline;
-    private int abnormal;
     private double interfaceRateKbps;
     private final Set<String> protocols = new LinkedHashSet<>();
     void addStatus(int status) {
-      if (status == 2) { abnormal++; } else if (status == 1) { online++; } else { offline++; }
+      // 同一发送方下只累计已启用的在线接口。
+      if (status == 1) { online++; }
     }
     int status() {
-      return abnormal > 0 || (online > 0 && offline > 0) ? 2 : (online == interfaceCount ? 1 : 0);
+      // 有启用接口就显示在线，全部禁用时显示离线。
+      return online > 0 ? 1 : 0;
     }
   }
 

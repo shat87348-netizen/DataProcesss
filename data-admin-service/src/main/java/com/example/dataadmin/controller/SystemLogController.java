@@ -67,13 +67,6 @@ public class SystemLogController {
                 pageSize));
     }
 
-    /** 查询来源下拉选项。 */
-    @GetMapping("/sources")
-    public ApiResponse<List<String>> listSources(
-            @RequestParam(required = false) String taskId) {
-        return ApiResponse.success(logService.listLogSources(taskId));
-    }
-
     /** 查询单条系统运行日志完整详情。 */
     @GetMapping("/{id}")
     public ApiResponse<SysRuntimeLog> getLog(@PathVariable Long id) {

@@ -82,6 +82,8 @@ subsystem:
 # 向交互系统定时上报当前系统心跳的配置。
 interaction:
   heartbeat:
+    # 是否开启心跳上报：true开启，false关闭，默认开启。
+    enabled: false
     # 交互系统接口协议。
     scheme: http
     # 交互系统服务IP。
@@ -123,10 +125,17 @@ task-lifecycle:
   consumer-group: data-processing-task-lifecycle
 
 system-monitor:
+  # 处理服务心跳正常判断时限，单位毫秒，应大于处理服务写入间隔。
+  process-heartbeat-timeout-millis: 15000
+  # 系统状态快照保留天数。
   snapshot-retention-days: 7
+  # CPU 使用率告警阈值，单位：百分比。
   cpu-warning-percent: 85
+  # 内存使用率告警阈值，单位：百分比。
   memory-warning-percent: 90
+  # 磁盘使用率告警阈值，单位：百分比。
   disk-warning-percent: 85
+  # 消息队列积压数量告警阈值，单位：条。
   queue-warning-depth: 1000
 
 # 当前数据处理结果主题的RocketMQ积压监控配置。

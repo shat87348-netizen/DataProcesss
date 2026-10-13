@@ -12,9 +12,9 @@ public class SysMonitorSnapshot {
     private String serviceStatus;
     /** 服务运行时长，单位秒。 */
     private Long uptimeSeconds;
-    /** 在线处理节点数量。 */
+    /** 已启用采集接口数量。 */
     private Integer onlineNodeCount;
-    /** 处理节点总数量。 */
+    /** 未删除采集接口总数量。 */
     private Integer totalNodeCount;
     /** 数据库连接耗时，单位毫秒。 */
     private Long databaseLatencyMs;
@@ -39,6 +39,11 @@ public class SysMonitorSnapshot {
     public void setId(Long id) { this.id = id; }
     public LocalDateTime getSampleTime() { return sampleTime; }
     public void setSampleTime(LocalDateTime sampleTime) { this.sampleTime = sampleTime; }
+    /** 返回注册中心服务状态中文名称。 */
+    public String getServiceStatusName() {
+        return com.example.dataadmin.enums.EnumData.labelOf(
+                com.example.dataadmin.enums.SystemMonitorServiceStatus.values(), serviceStatus);
+    }
     public String getServiceStatus() { return serviceStatus; }
     public void setServiceStatus(String serviceStatus) { this.serviceStatus = serviceStatus; }
     public Long getUptimeSeconds() { return uptimeSeconds; }
@@ -51,6 +56,10 @@ public class SysMonitorSnapshot {
     public void setDatabaseLatencyMs(Long databaseLatencyMs) { this.databaseLatencyMs = databaseLatencyMs; }
     public Long getMessageQueueDepth() { return messageQueueDepth; }
     public void setMessageQueueDepth(Long messageQueueDepth) { this.messageQueueDepth = messageQueueDepth; }
+    /** 返回心跳状态中文名称，等待状态不等于服务停止。 */
+    public String getHeartbeatStatusName() {
+        return com.example.dataadmin.enums.EnumData.labelOf(com.example.dataadmin.enums.SystemHeartbeatStatus.values(), heartbeatStatus);
+    }
     public String getHeartbeatStatus() { return heartbeatStatus; }
     public void setHeartbeatStatus(String heartbeatStatus) { this.heartbeatStatus = heartbeatStatus; }
     public LocalDateTime getLastHeartbeatTime() { return lastHeartbeatTime; }

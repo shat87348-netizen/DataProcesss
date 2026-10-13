@@ -18,6 +18,11 @@ import java.util.List;
 /** 按配置周期将缓存中的校准野值详情批量写入数据库。 */
 @Component
 public class CalibrationPersistenceScheduler {
+    /** 告警组件采用独立注入，复用已有离线构造入口。 */
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.example.dataprocess.service.DataAlarmRecorder alarmRecorder;
+
+
 
     /** 校准落库日志。 */
     private static final Logger LOGGER = LoggerFactory.getLogger(
@@ -62,6 +67,21 @@ public class CalibrationPersistenceScheduler {
         } catch (Exception exception) {
             // 数据库或反序列化失败时恢复原队列顺序，等待下次定时任务重试。
             restore(jsonValues);
+            if (alarmRecorder != null) {
+                // 每个接口最多产生一条批次告警，原野值明细仍按原队列重试。
+                java.util.Set<Long> interfaces = new java.util.HashSet<Long>();
+                for (String json : jsonValues) {
+                    try {
+                        CalibrationRecordDetailCache detail = objectMapper.readValue(json, CalibrationRecordDetailCache.class);
+                        if (interfaces.add(detail.getInterfaceId())) {
+                            alarmRecorder.recordForInterface(detail.getInterfaceId(), com.example.common.enums.DataAlarmType.CALIBRATION_PERSIST,
+                                    "本批次野值明细入库失败，已恢复队列等待重试；数量：" + jsonValues.size() + "；原因：" + exception.getMessage());
+                        }
+                    } catch (Exception ignored) {
+                        // 无法解析的上下文保留服务日志，不虚构参数或接口。
+                    }
+                }
+            }
             LOGGER.error("校准野值详情批量写入数据库失败，本批次已恢复到缓存队列", exception);
         }
     }

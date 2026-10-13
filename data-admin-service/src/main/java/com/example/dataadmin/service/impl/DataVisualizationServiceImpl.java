@@ -6,6 +6,7 @@ import com.example.dataadmin.mapper.FepFileListMapper;
 import com.example.dataadmin.mapper.MonitorDashboardWidgetMapper;
 import com.example.dataadmin.mapper.MonitorWidgetConfigItemMapper;
 import com.example.dataadmin.mapper.ProcessedTelemetryFilterSelectionMapper;
+import com.example.dataadmin.mapper.DeviceSatelliteMapper;
 import com.example.dataadmin.service.DataVisualizationService;
 import com.example.dataadmin.service.TelemetryFilterService;
 import com.example.dataadmin.dto.processing.TelemetryFilterSelectionRequest;
@@ -35,18 +36,22 @@ public class DataVisualizationServiceImpl implements DataVisualizationService {
     private final ProcessedTelemetryFilterSelectionMapper selectionMapper;
     /** 文件分页查询只读取已上传至对象存储的接收记录。 */
     private final FepFileListMapper fileListMapper;
+    /** 页面写入与整页配置替换共同锁定所属任务，避免并发写入残留组件。 */
+    private final DeviceSatelliteMapper deviceMapper;
 
     public DataVisualizationServiceImpl(
             MonitorDashboardWidgetMapper widgetMapper,
             MonitorWidgetConfigItemMapper itemMapper,
             TelemetryFilterService selectionService,
             ProcessedTelemetryFilterSelectionMapper selectionMapper,
-            FepFileListMapper fileListMapper) {
+            FepFileListMapper fileListMapper,
+            DeviceSatelliteMapper deviceMapper) {
         this.widgetMapper = widgetMapper;
         this.itemMapper = itemMapper;
         this.selectionService = selectionService;
         this.selectionMapper = selectionMapper;
         this.fileListMapper = fileListMapper;
+        this.deviceMapper = deviceMapper;
     }
 
     /** 查询当前用户在指定试验任务下的全部页面组件。 */
@@ -67,6 +72,8 @@ public class DataVisualizationServiceImpl implements DataVisualizationService {
     public Long createWidget(MonitorDashboardWidget widget) {
         // 组件类型必须来自统一枚举，任务编号不能为空。
         requireWidgetConfig(widget);
+        // 锁定同一任务后再新增，与整页替换保持串行。
+        lockTask(widget.getTaskId());
         widgetMapper.insert(widget);
         // 新组件的遥测参数由按需筛选树勾选，不复制任务下全部解析配置。
         return widget.getId();
@@ -76,6 +83,8 @@ public class DataVisualizationServiceImpl implements DataVisualizationService {
     @Override
     @Transactional
     public boolean updateWidget(MonitorDashboardWidget widget) {
+        // 加锁后重新读取组件，防止等待期间旧组件已经被整页导入删除。
+        lockWidget(widget.getId());
         // 修改布局时保持原任务和组件类型，避免已保存勾选失去归属。
         MonitorDashboardWidget existing = widgetMapper.findById(widget.getId());
         if (existing == null) { return false; }
@@ -93,6 +102,8 @@ public class DataVisualizationServiceImpl implements DataVisualizationService {
     @Override
     @Transactional
     public boolean deleteWidget(Long id) {
+        // 组件与参数勾选的清理使用同一任务锁。
+        lockWidget(id);
         // 先清理组件下的数据项，避免残留无法归属的配置记录。
         MonitorDashboardWidget widget = widgetMapper.findById(id);
         if (widget == null) { return false; }
@@ -117,6 +128,8 @@ public class DataVisualizationServiceImpl implements DataVisualizationService {
     @Override
     @Transactional
     public Long createWidgetItem(MonitorWidgetConfigItem item) {
+        // 在任务锁内确认组件仍存在，防止写入旧组件主键。
+        lockWidget(item.getWidgetId());
         // 未明确勾选的遥测参数默认保持未选中，避免重新运行迁移脚本时误勾选。
         if (item.getParseRuleId() != null && item.getIsSelected() == null) {
             item.setIsSelected(0);
@@ -134,6 +147,10 @@ public class DataVisualizationServiceImpl implements DataVisualizationService {
     @Transactional
     public boolean updateWidgetItem(MonitorWidgetConfigItem item) {
         MonitorWidgetConfigItem before = itemMapper.findById(item.getId());
+        if (before == null) { return false; }
+        // 等待整页替换结束后重新读取数据项，避免恢复已删除的数据项勾选。
+        lockWidget(before.getWidgetId());
+        before = itemMapper.findById(item.getId());
         if (before == null) { return false; }
         // 参数关联变化时清理原参数勾选，再保存新参数的勾选状态。
         boolean changedRule = item.getParseRuleId() != null
@@ -161,6 +178,10 @@ public class DataVisualizationServiceImpl implements DataVisualizationService {
     public boolean deleteWidgetItem(Long id) {
         MonitorWidgetConfigItem item = itemMapper.findById(id);
         if (item == null) { return false; }
+        // 数据项删除与整页替换按同一任务串行执行。
+        lockWidget(item.getWidgetId());
+        item = itemMapper.findById(id);
+        if (item == null) { return false; }
         // 遥测参数项删除时取消对应组件的勾选。
         if (item.getParseRuleId() != null) {
             saveParameterSelection(item, false);
@@ -173,6 +194,10 @@ public class DataVisualizationServiceImpl implements DataVisualizationService {
     @Transactional
     public boolean updateItemSelected(Long id, Integer isSelected) {
         MonitorWidgetConfigItem item = itemMapper.findById(id);
+        if (item == null) { return false; }
+        // 勾选只能写入加锁后仍存在的组件数据项。
+        lockWidget(item.getWidgetId());
+        item = itemMapper.findById(id);
         if (item == null) { return false; }
         // 只有非遥测参数项继续使用组件项自身的勾选列。
         if (item.getParseRuleId() == null) {
@@ -209,6 +234,26 @@ public class DataVisualizationServiceImpl implements DataVisualizationService {
             if (type.getValue().equals(widget.getWidgetType())) { return; }
         }
         throw new IllegalArgumentException("组件类型无效");
+    }
+
+    /** 页面写入复用任务行锁，与参数配置维护及配置整页替换保持一致。 */
+    private void lockTask(String taskId) {
+        if (taskId == null || taskId.trim().isEmpty() || deviceMapper.lockForReplacement(taskId) == null) {
+            throw new IllegalArgumentException("组件所属试验任务不存在");
+        }
+    }
+
+    /** 等待任务锁后重新确认组件存在，避免并发导入后出现悬空关联。 */
+    private void lockWidget(Long widgetId) {
+        MonitorDashboardWidget widget = widgetMapper.findById(widgetId);
+        if (widget == null) {
+            throw new IllegalArgumentException("可视化组件不存在");
+        }
+        // 任务锁查询会清理本地查询缓存，加锁后的确认读取最新组件记录。
+        lockTask(widget.getTaskId());
+        if (widgetMapper.findById(widgetId) == null) {
+            throw new IllegalArgumentException("可视化组件已被替换，请刷新页面后重试");
+        }
     }
 
     /** 按图片或文件组件类型查询，避免前端绕过组件类型筛选其他文件。 */

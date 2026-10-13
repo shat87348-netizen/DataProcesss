@@ -14,7 +14,6 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.lang.management.ManagementFactory;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -44,9 +43,6 @@ public class CollectInterfaceStatistics {
     /** 处理实时指标Redis键前缀。 */
     private static final String PROCESSING_CURRENT_PREFIX =
             "dashboard:processing:current:";
-    /** 数据处理服务运行指标Redis键。 */
-    private static final String PROCESSING_RUNTIME_KEY =
-            "dashboard:processing:runtime";
     /** 实时指标缓存保留秒数。 */
     private static final long REALTIME_TTL_SECONDS = 5L;
     /** 等待数据库落库的统计窗口键前缀。 */
@@ -113,7 +109,7 @@ public class CollectInterfaceStatistics {
         counter(taskId, interfaceId).processingCount.increment();
     }
 
-    /** 记录一个成功处理的PDXP数据帧，同时用于历史处理量和实时处理速率。 */
+    /** 记录业务处理完成且两个结果任务提交成功的PDXP帧，不代表异步入库或发送成功。 */
     public void recordFrameProcessing(String taskId, Long interfaceId) {
         InterfaceCounter counter = counter(taskId, interfaceId);
         // 第一步：累计历史处理量，继续写入五秒数据库统计窗口。
@@ -148,6 +144,10 @@ public class CollectInterfaceStatistics {
         String bucketKey = PENDING_BUCKET_PREFIX + bucketEpoch;
         for (Map.Entry<StatisticsKey, InterfaceCounter> entry : counters.entrySet()) {
             StatisticsKey key = entry.getKey();
+            // 使用单调时钟记录接口实际统计窗口，避免调度延迟和系统时间调整影响速率。
+            long sampleNanos = System.nanoTime();
+            double elapsedSeconds = Math.max(1L,
+                    sampleNanos - entry.getValue().lastSampleNanos) / 1_000_000_000D;
             CounterSnapshot snapshot = entry.getValue().drain();
             // 第一步：增量先原子写入Redis窗口，失败时完整恢复内存计数。
             if (snapshot.hasAnyValue()) {
@@ -160,23 +160,19 @@ public class CollectInterfaceStatistics {
                     continue;
                 }
             }
+            // 增量写入成功后推进接口窗口；失败恢复的帧继续使用原窗口计算速率。
+            entry.getValue().lastSampleNanos = sampleNanos;
             try {
                 // 第二步：实时采集速率始终刷新，空闲接口下一秒自然归零。
                 writeCollectionRealtime(key, snapshot.receivedBytes, sampleTime);
                 // 第三步：实时处理速率始终刷新，空闲接口下一秒自然归零。
                 writeProcessingRealtime(
-                        key, snapshot.realtimeProcessingCount, sampleTime);
+                        key, snapshot.realtimeProcessingCount / elapsedSeconds, sampleTime);
             } catch (Exception exception) {
                 // 增量已经可靠进入窗口，实时快照失败不能再次恢复以免重复累计。
                 LOGGER.error("接口实时统计写入Redis失败，任务编号：{}，接口编号：{}",
                         key.taskId, key.interfaceId, exception);
             }
-        }
-        try {
-            // 第四步：每秒采集一次数据处理服务自身的CPU和内存使用情况。
-            writeProcessingRuntime(sampleTime);
-        } catch (Exception exception) {
-            LOGGER.error("数据处理服务运行指标写入Redis失败", exception);
         }
     }
 
@@ -249,16 +245,21 @@ public class CollectInterfaceStatistics {
         Map<String, Object> metric = new LinkedHashMap<String, Object>();
         metric.put("interfaceRateKbps", round(receivedBytes / 1024D));
         metric.put("sampleTime", sampleTime.format(SAMPLE_TIME_FORMAT));
+        // 第一步：更新当前任务下接口的最新采集速率。
+        String redisKey = COLLECTION_CURRENT_PREFIX + key.taskId;
         redisTemplate.opsForHash().put(
-                COLLECTION_CURRENT_PREFIX + key.taskId,
+                redisKey,
                 interfaceField(key.interfaceId),
                 objectMapper.writeValueAsString(metric));
+        // 第二步：复用处理指标的五秒有效期，服务停止后自动清理采集旧速率。
+        redisTemplate.expire(
+                redisKey, REALTIME_TTL_SECONDS, TimeUnit.SECONDS);
     }
 
-    /** 写入一个接口上一秒的成功处理条数。 */
+    /** 写入一个接口按实际采样间隔计算的成功处理帧速率。 */
     private void writeProcessingRealtime(
             StatisticsKey key,
-            long processRate,
+            double processRate,
             LocalDateTime sampleTime) throws Exception {
         Map<String, Object> metric = new LinkedHashMap<String, Object>();
         metric.put("processRate", processRate);
@@ -271,42 +272,6 @@ public class CollectInterfaceStatistics {
         // 实时数据短期有效，处理服务停止后由Redis自动清理旧速率。
         redisTemplate.expire(
                 redisKey, REALTIME_TTL_SECONDS, TimeUnit.SECONDS);
-    }
-
-    /** 写入数据处理服务最新的CPU和JVM内存使用情况。 */
-    private void writeProcessingRuntime(LocalDateTime sampleTime)
-            throws Exception {
-        Map<String, Object> metric = new LinkedHashMap<String, Object>();
-        // 第一步：CPU按数据处理服务进程采样并换算为百分比。
-        metric.put("cpuUsagePercent", processCpuUsagePercent());
-        // 第二步：内存记录JVM当前已使用字节数，由查询端统一换算为GB。
-        metric.put("memoryUsageBytes", usedMemoryBytes());
-        metric.put("sampleTime", sampleTime.format(SAMPLE_TIME_FORMAT));
-        redisTemplate.opsForValue().set(
-                PROCESSING_RUNTIME_KEY,
-                objectMapper.writeValueAsString(metric),
-                REALTIME_TTL_SECONDS,
-                TimeUnit.SECONDS);
-    }
-
-    /** 读取数据处理服务进程CPU使用率并保留两位小数。 */
-    private double processCpuUsagePercent() {
-        java.lang.management.OperatingSystemMXBean operatingSystem =
-                ManagementFactory.getOperatingSystemMXBean();
-        if (!(operatingSystem
-                instanceof com.sun.management.OperatingSystemMXBean)) {
-            return 0D;
-        }
-        double load = ((com.sun.management.OperatingSystemMXBean)
-                operatingSystem).getProcessCpuLoad();
-        // JVM无法取得采样值时按零返回，避免向页面暴露负数。
-        return load < 0D ? 0D : round(load * 100D);
-    }
-
-    /** 计算数据处理服务JVM当前已使用内存字节数。 */
-    private long usedMemoryBytes() {
-        Runtime runtime = Runtime.getRuntime();
-        return Math.max(0L, runtime.totalMemory() - runtime.freeMemory());
     }
 
     /** 累加一个接口在当前Redis窗口中的全部指标。 */
@@ -459,6 +424,8 @@ public class CollectInterfaceStatistics {
 
     /** 单个接口尚未形成秒级快照的线程安全计数器。 */
     private static final class InterfaceCounter {
+        /** 当前接口统计窗口的单调时钟起点，首次统计从接口建立时开始。 */
+        private volatile long lastSampleNanos = System.nanoTime();
         private final LongAdder collectionCount = new LongAdder();
         private final LongAdder receivedBytes = new LongAdder();
         private final LongAdder processingCount = new LongAdder();

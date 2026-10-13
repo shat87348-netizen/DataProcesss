@@ -102,7 +102,7 @@ POST请求统一使用 `Content-Type: application/json`，字段使用驼峰命�
 | 协议 | `transferProtocol` | `transferType` | 默认端口 | 默认间隔 | 默认循环 |
 |---|---|---|---|---|---|
 | PDXP | 2 | 1（UDP） | 9001 | 500毫秒 | 1（是） |
-| FEP | 4 | 2（TCP） | 19003 | 10毫秒 | 0（否） |
+| FEP | 3 | 2（TCP） | 19003 | 10毫秒 | 0（否） |
 
 运行状态筛选的数字与响应中文对应如下：
 
@@ -309,7 +309,7 @@ FEP无需512字节对齐，支持空文件；文件长度上限为2147483647字�
 ```json
 {
   "sourceName": "文件模拟源一",
-  "transferProtocol": 4,
+  "transferProtocol": 3,
   "transferType": 2,
   "filePath": "D:/模拟数据/example.dat",
   "targetHost": "127.0.0.1",

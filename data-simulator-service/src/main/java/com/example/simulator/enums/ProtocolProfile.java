@@ -6,7 +6,7 @@ package com.example.simulator.enums;
  */
 public enum ProtocolProfile {
     PDXP(2, 1, "PDXP", "用户数据报传输", 9001, 500L, 1),
-    FEP(4, 2, "FEP", "传输控制协议", 19003, 10L, 0);
+    FEP(3, 2, "FEP", "传输控制协议", 19003, 10L, 0);
 
     public final int protocol;
     public final int transport;

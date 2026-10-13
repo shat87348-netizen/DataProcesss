@@ -21,8 +21,9 @@ public class InterfaceQueryRequest {
     /** 按传输方式过滤：1 UDP，2 TCP，3 HTTP。 */
     private Integer transferType;
 
-    /** 运行状态：0 离线，1 在线，2 异常。 */
-    /** 按运行状态过滤：0 离线，1 在线。 */
+    /** 按启用开关对应的在线状态过滤：0离线，1在线。 */
+    @Min(value = 0, message = "接口状态只能为0（离线）或1（在线）")
+    @Max(value = 1, message = "接口状态只能为0（离线）或1（在线）")
     private Integer status;
 
     /** 启用状态：0 禁用，1 启用。 */

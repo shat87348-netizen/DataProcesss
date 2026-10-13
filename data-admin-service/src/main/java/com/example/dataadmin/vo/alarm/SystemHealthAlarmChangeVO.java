@@ -1,6 +1,6 @@
 package com.example.dataadmin.vo.alarm;
 
-import com.example.dataadmin.entity.SysHealthAlarmEvent;
+import com.example.dataadmin.entity.SysAlarmEvent;
 import com.example.dataadmin.enums.SystemHealthAlarmChangeType;
 
 /** WebSocket 推送的单条系统健康告警变化。 */
@@ -10,8 +10,10 @@ public class SystemHealthAlarmChangeVO {
     private SystemHealthAlarmChangeType changeType;
 
     /** 发生变化后的完整告警数据。 */
-    private SysHealthAlarmEvent alarmEvent;
+    private SysAlarmEvent alarmEvent;
 
+    /** 返回告警变化类型的中文名称。 */
+    public String getChangeTypeName() { return changeType == null ? null : changeType.getLabel(); }
     public SystemHealthAlarmChangeType getChangeType() {
         return changeType;
     }
@@ -20,11 +22,11 @@ public class SystemHealthAlarmChangeVO {
         this.changeType = changeType;
     }
 
-    public SysHealthAlarmEvent getAlarmEvent() {
+    public SysAlarmEvent getAlarmEvent() {
         return alarmEvent;
     }
 
-    public void setAlarmEvent(SysHealthAlarmEvent alarmEvent) {
+    public void setAlarmEvent(SysAlarmEvent alarmEvent) {
         this.alarmEvent = alarmEvent;
     }
 }

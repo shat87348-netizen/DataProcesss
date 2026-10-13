@@ -33,6 +33,10 @@ mybatis:
 
 
 system-monitor:
+  # 处理服务心跳写入间隔，单位毫秒；多个实例共用心跳键。
+  process-heartbeat-interval-millis: 5000
+  # 心跳键过期时间，单位毫秒，必须大于写入间隔。
+  process-heartbeat-expiry-millis: 30000
   snapshot-retention-days: 7
   cpu-warning-percent: 85
   memory-warning-percent: 90
@@ -57,6 +61,18 @@ data-processing:
   process-thread-count: 64
   # 数据处理线程池等待队列容量。
   process-queue-capacity: 2048
+  # 遥测结果异步处理配置，入库与消息任务各自排队，不占用处理线程。
+  result:
+    # IoTDB入库固定线程数，应结合连接池大小调整。
+    storage-thread-count: 4
+    # IoTDB待入库任务上限，队列满时记录告警并拒绝任务。
+    storage-queue-capacity: 2048
+    # RocketMQ发送固定线程数。
+    message-thread-count: 4
+    # RocketMQ待发送任务上限，队列满时记录告警并拒绝任务。
+    message-queue-capacity: 2048
+    # 服务关闭时两个线程池共享的最大等待时间，单位秒。
+    shutdown-wait-seconds: 30
   # 每秒把采集和处理增量写入Redis实时统计。
   statistics-sample-millis: 1000
   # 每五秒把已经结束的Redis统计窗口写入数据库。

@@ -11,9 +11,15 @@ import com.example.dataadmin.entity.MonitorDashboardWidget;
 import com.example.dataadmin.entity.MonitorWidgetConfigItem;
 import com.example.dataadmin.enums.ControllerEnumData;
 import com.example.dataadmin.service.DataVisualizationService;
+import com.example.dataadmin.service.VisualizationConfigService;
+import com.example.dataadmin.vo.visualization.VisualizationConfigPreviewVO;
 import com.example.dataadmin.vo.EnumOptionVO;
 import com.example.security.context.LoginUserContext;
 import org.springframework.beans.BeanUtils;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,8 +27,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import javax.validation.Valid;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -34,10 +43,56 @@ import java.util.Map;
 public class DataVisualizationController {
 
     private final DataVisualizationService visualizationService;
+    /** 整页配置导入导出业务组件。 */
+    private final VisualizationConfigService configService;
 
     public DataVisualizationController(
-            DataVisualizationService visualizationService) {
+            DataVisualizationService visualizationService, VisualizationConfigService configService) {
         this.visualizationService = visualizationService;
+        this.configService = configService;
+    }
+
+    /** 下载当前用户指定任务的整页可视化配置文件。 */
+    @GetMapping(value = "/config/export", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<byte[]> exportConfig(@RequestParam String taskId) {
+        // 第一步：用户范围从登录上下文取得，客户端不能指定其他用户。
+        byte[] bytes = configService.exportConfig(taskId, LoginUserContext.getRequired().getUserId());
+        // 第二步：以附件形式返回标准配置文件，下载内容不包裹统一响应对象。
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename("可视化配置.json", StandardCharsets.UTF_8).build().toString())
+                .body(bytes);
+    }
+
+    /** 只读检查配置文件及其在目标任务中的参数、接口、协议匹配情况。 */
+    @PostMapping(value = "/config/import/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<VisualizationConfigPreviewVO> previewConfig(@RequestParam String taskId,
+            @RequestParam("file") MultipartFile file) {
+        // 文件检查只返回中文问题和数量，不修改原组件或勾选记录。
+        return ApiResponse.success(configService.preview(taskId, LoginUserContext.getRequired().getUserId(),
+                file.getOriginalFilename(), readConfigFile(file)));
+    }
+
+    /** 上传同一文件，重新检查并事务替换当前用户目标任务的整页配置。 */
+    @PostMapping(value = "/config/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<VisualizationConfigPreviewVO> importConfig(@RequestParam String taskId,
+            @RequestParam("file") MultipartFile file) {
+        // 不接受客户端提供用户或主键映射，实际关联由业务服务重新匹配。
+        return ApiResponse.success(configService.importConfig(taskId, LoginUserContext.getRequired().getUserId(),
+                file.getOriginalFilename(), readConfigFile(file)));
+    }
+
+    /** 在读取全部字节前检查体积，避免超大上传占用业务内存。 */
+    private byte[] readConfigFile(MultipartFile file) {
+        if (file.isEmpty() || file.getSize() > VisualizationConfigService.MAX_FILE_BYTES) {
+            throw new IllegalArgumentException("配置文件不能为空，且不能超过十兆字节");
+        }
+        try {
+            return file.getBytes();
+        } catch (IOException exception) {
+            throw new IllegalArgumentException("读取可视化配置文件失败", exception);
+        }
     }
 
     /** 查询数据可视化页面涉及的全部枚举选项。 */

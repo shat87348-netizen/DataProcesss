@@ -7,9 +7,6 @@ package com.example.dataadmin.enums;
  */
 public enum SystemLogLevel implements LabeledEnum {
 
-    /** 调试信息。 */
-    DEBUG("DEBUG", "调试"),
-
     /** 普通运行信息。 */
     INFO("INFO", "信息"),
 
@@ -67,7 +64,7 @@ public enum SystemLogLevel implements LabeledEnum {
             }
         }
         throw new IllegalArgumentException(
-                "日志级别只能为DEBUG、INFO、WARN或ERROR");
+                "日志级别只能为INFO、WARN或ERROR");
     }
 
     /** 根据枚举编码返回中文说明，未知或空编码返回null。 */

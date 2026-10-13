@@ -8,11 +8,9 @@ import com.example.dataadmin.dto.collection.InterfaceQueryRequest;
 import com.example.dataadmin.dto.collection.InterfaceSaveRequest;
 import com.example.dataadmin.dto.collection.ProtocolSaveRequest;
 import com.example.dataadmin.entity.CollectInterfaceConfig;
-import com.example.dataadmin.entity.SysRuntimeLog;
 import com.example.dataadmin.enums.ControllerEnumData;
 import com.example.dataadmin.service.DataCollectionService;
 import com.example.dataadmin.vo.EnumOptionVO;
-import com.example.dataadmin.vo.collection.CollectionEventOverviewVO;
 import com.example.dataadmin.vo.collection.CollectionOverviewVO;
 import com.example.dataadmin.vo.collection.ProtocolConfigVO;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -156,23 +154,6 @@ public class DataCollectionController {
                 request.getId(),
                 request.getEnabled());
         return ApiResponse.success();
-    }
-
-    /** 查询采集事件级别统计。 */
-    @GetMapping("/events/overview")
-    public ApiResponse<CollectionEventOverviewVO> getEventOverview(
-            @RequestParam(required = false) String taskId) {
-        return ApiResponse.success(
-                dataCollectionService.getEventOverview(taskId));
-    }
-
-    /** 查询最近的采集接口事件。 */
-    @GetMapping("/events")
-    public ApiResponse<List<SysRuntimeLog>> listEvents(
-            @RequestParam(required = false) String taskId,
-            @RequestParam(required = false) Integer limit) {
-        return ApiResponse.success(
-                dataCollectionService.listEvents(taskId, limit));
     }
 
     /** 校验修改请求中的业务主键。 */

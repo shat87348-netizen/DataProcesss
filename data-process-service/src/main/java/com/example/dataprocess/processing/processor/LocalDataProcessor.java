@@ -45,6 +45,16 @@ import java.util.regex.Pattern;
 /** 使用采集接口关联协议配置完成本地解析。 */
 @Component
 public class LocalDataProcessor implements DataProcessor {
+    /** 告警组件采用独立注入，复用已有离线构造入口。 */
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.example.dataprocess.service.DataAlarmRecorder alarmRecorder;
+
+    /** 提交异常上下文，采集线程不直接写数据库。 */
+    private void alarm(com.example.dataprocess.entity.CollectInterfaceRuntimeConfig config,
+            com.example.common.enums.DataAlarmType type, String detail) {
+        if (alarmRecorder != null) { alarmRecorder.record(config, type, detail); }
+    }
+
     /** 时间参数的计数起点，直接使用协议约定的日历时间，不作时区偏移。 */
     private static final LocalDateTime PARAMETER_TIME_EPOCH =
             LocalDateTime.of(2000, 1, 1, 12, 0);
@@ -140,6 +150,7 @@ public class LocalDataProcessor implements DataProcessor {
                 telemetry.setSystemName(item.getSystemName().trim());
             }
             state(telemetry, item, value);
+            recordState(config, telemetry, item, value);
             message.putTelemetries(
                     telemetry.getTmSymbol(), telemetry.build());
         }
@@ -266,6 +277,28 @@ public class LocalDataProcessor implements DataProcessor {
             telemetry.setStateType(StateType.STATE_TYPE_NORMAL)
                     .setStateIndex(match.index)
                     .setStateName(match.name);
+        }
+    }
+
+    /** 范围检查关闭时不生成数据告警，缺失规则作为配置异常记录。 */
+    private void recordState(CollectInterfaceRuntimeConfig config, Telemetry.Builder telemetry,
+            PdxpProtocolField field, BigInteger value) {
+        if (alarmRecorder == null || !Integer.valueOf(1).equals(config.getParameterRangeCheckEnabled())
+                || !"1".equals(trim(field.getAlarmFlag()))) { return; }
+        String ranges = configuredRange(field.getWarningValue()) ? field.getWarningValue() : field.getNormalValue();
+        if (!configuredRange(ranges)) {
+            alarmRecorder.record(config, com.example.common.enums.DataAlarmType.PROCESS_CONFIG,
+                    field.getTelemetryCode(), field.getTelemetryName(), null, null,
+                    "参数已开启报警，但未配置有效范围；停止该参数的告警判定");
+            // 无范围不能把所有值都误判为越限。
+            telemetry.clearStateType();
+        } else if (telemetry.getStateType() == StateType.STATE_TYPE_ALARM) {
+            alarmRecorder.record(config, com.example.common.enums.DataAlarmType.PARAMETER_RANGE,
+                    field.getTelemetryCode(), field.getTelemetryName(), null, ranges,
+                    "判定原码值：" + value + "；未命中允许范围，当前任务继续处理");
+        } else {
+            alarmRecorder.recover(config, com.example.common.enums.DataAlarmType.PARAMETER_RANGE,
+                    field.getTelemetryCode(), null);
         }
     }
 

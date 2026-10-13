@@ -36,15 +36,6 @@
     </select>
 
     <!-- 查询日志来源下拉选项，结果已去重并按来源名称排序。 -->
-    <select id="findSourceNames" resultType="string">
-        select distinct log_source
-        from sys_runtime_log
-        where log_source is not null
-          and trim(log_source) != ''
-        <if test="taskId != null and taskId != ''">and task_id = #{taskId}</if>
-        order by log_source
-    </select>
-
     <!-- 按试验任务查询列表。 -->
     <select id="findAllByTaskId" resultType="com.example.dataadmin.entity.SysRuntimeLog">
         select <include refid="columns"/> from sys_runtime_log
@@ -108,38 +99,5 @@
 
     <!-- 按试验任务清理运行日志。 -->
     <delete id="deleteByTaskId">delete from sys_runtime_log where task_id = #{taskId}</delete>
-
-    <!-- 查询数据采集、代理和协议解析组件产生的最近事件。 -->
-    <select id="findCollectionEvents"
-            resultType="com.example.dataadmin.entity.SysRuntimeLog">
-        select
-            <include refid="columns"/>
-        from sys_runtime_log
-        where log_source in ('DataCollector', 'AgentManager', 'ProtocolParser')
-        <if test="taskId != null and taskId != ''">
-            and task_id = #{taskId}
-        </if>
-        order by log_time desc, id desc
-        limit #{limit}
-    </select>
-
-    <!-- 统计数据采集相关事件的各级别数量。 -->
-    <select id="findCollectionEventOverview"
-            resultType="com.example.dataadmin.vo.collection.CollectionEventOverviewVO">
-        select
-            coalesce(sum(case when upper(log_level) = 'INFO' then 1 else 0 end), 0)
-                as info_total,
-            coalesce(sum(case when upper(log_level) in ('WARN', 'WARNING') then 1 else 0 end), 0)
-                as warning_total,
-            coalesce(sum(case when upper(log_level) = 'ERROR' then 1 else 0 end), 0)
-                as error_total,
-            coalesce(sum(case when upper(log_level) in ('FATAL', 'CRITICAL') then 1 else 0 end), 0)
-                as critical_total
-        from sys_runtime_log
-        where log_source in ('DataCollector', 'AgentManager', 'ProtocolParser')
-        <if test="taskId != null and taskId != ''">
-            and task_id = #{taskId}
-        </if>
-    </select>
 
 </mapper>

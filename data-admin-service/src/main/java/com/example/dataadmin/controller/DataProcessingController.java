@@ -4,7 +4,6 @@ import com.example.common.response.ApiResponse;
 import com.example.common.response.PageResult;
 import com.example.dataadmin.dto.processing.ProcessingRuleConfigRequest;
 import com.example.dataadmin.dto.processing.TelemetryParseRuleBatchUpdateRequest;
-import com.example.dataadmin.entity.DataProcessLog;
 import com.example.dataadmin.entity.TelemetryParseRuleConfig;
 import com.example.dataadmin.entity.ProcessingRuleConfig;
 import com.example.dataadmin.service.DataProcessingService;
@@ -64,7 +63,7 @@ public class DataProcessingController {
         return ApiResponse.success(processingService.getOverview(taskId));
     }
 
-    /** 按试验任务查询实时处理速率及数据处理服务运行指标。 */
+    /** 按试验任务查询所有接口处理速率之和及与系统告警同口径的机器资源指标。 */
     @GetMapping("/realtime")
     public ApiResponse<DataProcessingRealtimeVO> getRealtime(
             @RequestParam String taskId) {
@@ -138,22 +137,6 @@ public class DataProcessingController {
         BeanUtils.copyProperties(request, config);
         return ApiResponse.success(
                 processingService.saveProcessingRuleConfig(config));
-    }
-
-    /** 使用PageHelper分页查询数据处理日志。 */
-    @GetMapping("/logs")
-    public ApiResponse<PageResult<DataProcessLog>> listLogs(
-            @RequestParam(required = false) String taskId,
-            @RequestParam(required = false) Long processTaskId,
-            @RequestParam(required = false) Integer logLevel,
-            @RequestParam(defaultValue = "1") Integer pageNum,
-            @RequestParam(defaultValue = "20") Integer pageSize) {
-        return ApiResponse.success(processingService.pageProcessLogs(
-                taskId,
-                processTaskId,
-                logLevel,
-                pageNum,
-                pageSize));
     }
 
     /** 查询参数筛选用设备卫星，仅返回编码字段。 */

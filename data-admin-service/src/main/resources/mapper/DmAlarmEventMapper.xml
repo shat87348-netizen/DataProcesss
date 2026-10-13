@@ -3,23 +3,33 @@
 <mapper namespace="com.example.dataadmin.mapper.DmAlarmEventMapper">
 
     <!-- 公共查询字段。 -->
-    <sql id="columns">id, task_id, alarm_time, source_name, alarm_msg, alarm_level, alarm_status, task_name, channel_code, trigger_rule, is_deleted, create_time, update_time</sql>
+    <sql id="columns">id, task_id, alarm_time, source_name as source_code, alarm_msg, alarm_level, alarm_status, task_name, channel_code, trigger_rule, is_deleted, create_time, update_time, event_type, interface_id, process_task_id, calib_channel_id, tm_symbol, parameter_name, alarm_detail, trigger_count, last_trigger_time, recover_time</sql>
 
     <!-- 按页面来源、关键字、级别、状态和时间范围组合查询列表。 -->
     <select id="findAll" resultType="com.example.dataadmin.entity.DmAlarmEvent">
         select <include refid="columns"/> from dm_alarm_event
         <where>
             <if test="taskId != null and taskId != ''">task_id = #{taskId}</if>
-            <if test="sourceName != null and sourceName != ''">
-                and source_name = #{sourceName}
+            <if test="sourceCode != null and sourceCode != ''">
+                and source_name = #{sourceCode}
             </if>
             <if test="keyword != null and keyword != ''">
                 and (
                     source_name like '%' || #{keyword} || '%'
+                    <!-- 中文来源名称先由枚举转换成编码，仅有匹配项时增加筛选。 -->
+                    <if test="sourceKeywordValues != null and sourceKeywordValues.size() &gt; 0">
+                        or source_name in
+                        <foreach collection="sourceKeywordValues" item="sourceValue" open="(" separator="," close=")">
+                            #{sourceValue}
+                        </foreach>
+                    </if>
                     or alarm_msg like '%' || #{keyword} || '%'
                     or task_name like '%' || #{keyword} || '%'
                     or channel_code like '%' || #{keyword} || '%'
                     or trigger_rule like '%' || #{keyword} || '%'
+                    or parameter_name like '%' || #{keyword} || '%'
+                    or tm_symbol like '%' || #{keyword} || '%'
+                    or alarm_detail like '%' || #{keyword} || '%'
                 )
             </if>
             <if test="alarmLevel != null">
@@ -39,23 +49,12 @@
         order by alarm_time desc, id desc
     </select>
 
-    <!-- 查询来源下拉选项，只返回当前任务下非空且未删除的来源。 -->
-    <select id="findSourceNames" resultType="string">
-        select distinct source_name
-        from dm_alarm_event
-        where is_deleted = 0
-          and source_name is not null
-          and trim(source_name) != ''
-        <if test="taskId != null and taskId != ''">and task_id = #{taskId}</if>
-        order by source_name
-    </select>
-
     <!-- 按主键查询详情。 -->
     <select id="findById" resultType="com.example.dataadmin.entity.DmAlarmEvent">
         select <include refid="columns"/> from dm_alarm_event where id = #{id} and is_deleted = 0
     </select>
 
-    <!-- 新增记录并通过序列生成主键。 -->
+    <!-- 后台自动新增告警并通过序列生成主键。 -->
     <insert id="insert">
         <selectKey keyProperty="id" resultType="long" order="BEFORE">
             select nextval('dm_alarm_event_id_seq')
@@ -65,13 +64,24 @@
             id,
             <if test="taskId != null and taskId != ''">task_id,</if>
             <if test="alarmTime != null">alarm_time,</if>
-            <if test="sourceName != null">source_name,</if>
+            <if test="sourceCode != null">source_name,</if>
             <if test="alarmMsg != null">alarm_msg,</if>
             <if test="alarmLevel != null">alarm_level,</if>
             <if test="alarmStatus != null">alarm_status,</if>
             <if test="taskName != null">task_name,</if>
             <if test="channelCode != null">channel_code,</if>
             <if test="triggerRule != null">trigger_rule,</if>
+            <if test="eventType != null">event_type,</if>
+            <if test="interfaceId != null">interface_id,</if>
+            <if test="processTaskId != null">process_task_id,</if>
+            <if test="calibChannelId != null">calib_channel_id,</if>
+            <if test="tmSymbol != null">tm_symbol,</if>
+            <if test="parameterName != null">parameter_name,</if>
+            <if test="alarmDetail != null">alarm_detail,</if>
+            <if test="triggerCount != null">trigger_count,</if>
+            <if test="lastTriggerTime != null">last_trigger_time,</if>
+            <if test="recoverTime != null">recover_time,</if>
+            <if test="dedupKey != null">dedup_key,</if>
             <if test="isDeleted != null">is_deleted,</if>
         </trim>
         values
@@ -79,43 +89,58 @@
             #{id},
             <if test="taskId != null and taskId != ''">#{taskId},</if>
             <if test="alarmTime != null">#{alarmTime},</if>
-            <if test="sourceName != null">#{sourceName},</if>
+            <if test="sourceCode != null">#{sourceCode},</if>
             <if test="alarmMsg != null">#{alarmMsg},</if>
             <if test="alarmLevel != null">#{alarmLevel},</if>
             <if test="alarmStatus != null">#{alarmStatus},</if>
             <if test="taskName != null">#{taskName},</if>
             <if test="channelCode != null">#{channelCode},</if>
             <if test="triggerRule != null">#{triggerRule},</if>
+            <if test="eventType != null">#{eventType},</if>
+            <if test="interfaceId != null">#{interfaceId},</if>
+            <if test="processTaskId != null">#{processTaskId},</if>
+            <if test="calibChannelId != null">#{calibChannelId},</if>
+            <if test="tmSymbol != null">#{tmSymbol},</if>
+            <if test="parameterName != null">#{parameterName},</if>
+            <if test="alarmDetail != null">#{alarmDetail},</if>
+            <if test="triggerCount != null">#{triggerCount},</if>
+            <if test="lastTriggerTime != null">#{lastTriggerTime},</if>
+            <if test="recoverTime != null">#{recoverTime},</if>
+            <if test="dedupKey != null">#{dedupKey},</if>
             <if test="isDeleted != null">#{isDeleted},</if>
         </trim>
     </insert>
 
-    <!-- 按主键更新非空字段。 -->
-    <update id="update">
-        update dm_alarm_event
-        <set>
-            <if test="taskId != null and taskId != ''">task_id = #{taskId},</if>
-            <if test="alarmTime != null">alarm_time = #{alarmTime},</if>
-            <if test="sourceName != null">source_name = #{sourceName},</if>
-            <if test="alarmMsg != null">alarm_msg = #{alarmMsg},</if>
-            <if test="alarmLevel != null">alarm_level = #{alarmLevel},</if>
-            <if test="alarmStatus != null">alarm_status = #{alarmStatus},</if>
-            <if test="taskName != null">task_name = #{taskName},</if>
-            <if test="channelCode != null">channel_code = #{channelCode},</if>
-            <if test="triggerRule != null">trigger_rule = #{triggerRule},</if>
-            update_time = current_timestamp,
-        </set>
-        where id = #{id} and is_deleted = 0
-    </update>
-
-    <!-- 删除记录；包含逻辑删除字段的表执行逻辑删除。 -->
-    <update id="delete">
-        update dm_alarm_event set is_deleted = 1, update_time = current_timestamp where id = #{id} and is_deleted = 0
-    </update>
-
-    <!-- 更新业务状态。 -->
+    <!-- 只修改人工处理状态，不改变异常内容和自动恢复时间。 -->
     <update id="updateStatus">
         update dm_alarm_event set alarm_status = #{alarmStatus}, update_time = current_timestamp where id = #{id} and is_deleted = 0
     </update>
 
+    <!-- 自动告警合并写入，人工处理状态保持不变。 -->
+    <select id="lockKey" resultType="string">
+        select pg_advisory_xact_lock(hashtext(#{key}))
+    </select>
+    <!-- 自动告警合并写入，人工处理状态保持不变。 -->
+    <select id="findRecent" resultType="com.example.dataadmin.entity.DmAlarmEvent">
+        select id, alarm_time, last_trigger_time, trigger_count
+        from dm_alarm_event
+        where dedup_key = #{key} and is_deleted = 0 and alarm_status = 0
+          and recover_time is null and last_trigger_time &gt;= #{since}
+        order by last_trigger_time desc, id desc limit 1
+    </select>
+    <!-- 自动告警合并写入，人工处理状态保持不变。 -->
+    <update id="mergeAutomatic">
+        update dm_alarm_event
+        set alarm_msg = #{alarmMsg}, alarm_detail = #{alarmDetail},
+            trigger_count = trigger_count + #{triggerCount},
+            last_trigger_time = #{lastTriggerTime}, recover_time = #{recoverTime},
+            alarm_level = greatest(alarm_level, #{alarmLevel}), update_time = current_timestamp
+        where id = #{id} and is_deleted = 0
+    </update>
+    <!-- 自动告警合并写入，人工处理状态保持不变。 -->
+    <update id="recoverAutomatic">
+        update dm_alarm_event set recover_time = #{recoverTime}, update_time = current_timestamp
+        where dedup_key = #{dedupKey} and is_deleted = 0 and recover_time is null
+          and last_trigger_time &lt;= #{recoverTime}
+    </update>
 </mapper>

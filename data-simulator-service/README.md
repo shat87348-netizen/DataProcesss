@@ -77,7 +77,7 @@ Nacos配置应在启动前发布，模块不再内置业务配置兜底。为保
 ```json
 {
   "sourceName": "文件模拟源一",
-  "transferProtocol": 4,
+  "transferProtocol": 3,
   "transferType": 2,
   "filePath": "D:/模拟数据/example.dat",
   "targetHost": "127.0.0.1",

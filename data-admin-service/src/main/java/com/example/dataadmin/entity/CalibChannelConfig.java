@@ -17,11 +17,9 @@ public class CalibChannelConfig {
     private String taskId;
     /** 通道名称。 */
     private String channelName;
-    /** 通道类型：1温度传感器 2电压传感器 3电流传感器 4功率传感器 5姿态传感器。 */
-    private Integer channelType;
     /** 校准公式。 */
     private String calibrationFormula;
-    /** 正常范围，如0~36V。 */
+    /** 正常范围，如0~36V，仅阈值法必填。 */
     private String normalRange;
     /** 野值检测方法：1莱特准则 2阈值法 3肖维涅法。 */
     private Integer detectMethod;
@@ -74,19 +72,6 @@ public class CalibChannelConfig {
 
     public void setChannelName(String channelName) {
         this.channelName = channelName;
-    }
-
-    public Integer getChannelType() {
-        return channelType;
-    }
-
-    public void setChannelType(Integer channelType) {
-        this.channelType = channelType;
-    }
-
-    /** 返回通道类型中文名称。 */
-    public String getChannelTypeName() {
-        return EnumData.labelOf(BusinessEnums.ChannelType.values(), channelType);
     }
 
     public String getCalibrationFormula() {

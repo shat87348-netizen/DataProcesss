@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.dataprocess.mapper.DataAlarmRecordMapper">
+    <!-- 相同业务对象和参数共用事务锁，避免多个处理实例同时生成重复活动告警。 -->
+    <select id="lockKey" resultType="string">
+        select pg_advisory_xact_lock(hashtext(#{key}))
+    </select>
+    <select id="findRecent" resultType="com.example.common.alarm.DataAlarmRecord">
+        select id, alarm_time, last_trigger_time, trigger_count
+        from dm_alarm_event
+        where dedup_key = #{key} and is_deleted = 0 and alarm_status = 0
+          and recover_time is null and last_trigger_time &gt;= #{since}
+        order by last_trigger_time desc, id desc limit 1
+    </select>
+    <!-- 只写入能从运行上下文确定的身份字段，其他字段保留为空。 -->
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        insert into dm_alarm_event
+        (task_id, alarm_time, source_name, alarm_msg, alarm_level, alarm_status,
+         event_type, interface_id, process_task_id, calib_channel_id, tm_symbol,
+         parameter_name, alarm_detail, trigger_rule, trigger_count,
+         last_trigger_time, recover_time, dedup_key)
+        values
+        (#{taskId}, #{alarmTime}, #{sourceCode}, #{alarmMsg}, #{alarmLevel}, 0,
+         #{eventType}, #{interfaceId}, #{processTaskId}, #{calibChannelId}, #{tmSymbol},
+         #{parameterName}, #{alarmDetail}, #{triggerRule}, #{triggerCount},
+         #{lastTriggerTime}, #{recoverTime}, #{dedupKey})
+    </insert>
+    <!-- 人工处理状态不随自动合并或恢复改变。 -->
+    <update id="merge">
+        update dm_alarm_event
+        set alarm_msg = #{alarmMsg}, alarm_detail = #{alarmDetail},
+            trigger_count = trigger_count + #{triggerCount},
+            last_trigger_time = #{lastTriggerTime}, recover_time = #{recoverTime},
+            alarm_level = greatest(alarm_level, #{alarmLevel}), update_time = current_timestamp
+        where id = #{id} and is_deleted = 0
+    </update>
+    <update id="recover">
+        update dm_alarm_event set recover_time = #{recoverTime}, update_time = current_timestamp
+        where dedup_key = #{dedupKey} and is_deleted = 0 and recover_time is null
+          and last_trigger_time &lt;= #{recoverTime}
+    </update>
+    <select id="findInterface" resultType="com.example.dataprocess.entity.CollectInterfaceRuntimeConfig">
+        select id as interface_id, task_id, interface_name, host, port,
+               transfer_type, transfer_protocol, protocol_config_id
+        from collect_interface_config where id = #{id}
+    </select>
+</mapper>

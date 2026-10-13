@@ -34,9 +34,19 @@ import java.util.function.BooleanSupplier;
 /** FEP协议处理器，负责UDP和TCP下的文件接收协议。 */
 @Component
 public class FepProtocolHandler implements ProtocolHandler {
+    /** 告警组件采用独立注入，复用已有离线构造入口。 */
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.example.dataprocess.service.DataAlarmRecorder alarmRecorder;
+
+    /** 提交异常上下文，采集线程不直接写数据库。 */
+    private void alarm(com.example.dataprocess.entity.CollectInterfaceRuntimeConfig config,
+            com.example.common.enums.DataAlarmType type, String detail) {
+        if (alarmRecorder != null) { alarmRecorder.record(config, type, detail); }
+    }
+
 
     /** FEP传输协议。 */
-    private static final int TRANSFER_PROTOCOL_FEP = 4;
+    private static final int TRANSFER_PROTOCOL_FEP = 3;
     /** 01发送请求包除类型字节外的长度。 */
     private static final int SEND_REQUEST_BODY_LENGTH =
             FepProtocolTool.FILE_NAME_LENGTH
@@ -133,8 +143,14 @@ public class FepProtocolHandler implements ProtocolHandler {
                             .handle((ignored, exception) -> null)
                             .thenRunAsync(
                                     () -> process(packet),
-                                    dataProcessExecutor);
+                                    dataProcessExecutor).whenComplete((ignored, failure) -> {
+                                        if (failure != null) {
+                                            alarm(config, com.example.common.enums.DataAlarmType.PROCESS_QUEUE,
+                                                    "文件报文异步提交失败，当前报文未处理：" + failure.getMessage());
+                                        }
+                                    });
                 } catch (RejectedExecutionException exception) {
+                    alarm(config, com.example.common.enums.DataAlarmType.PROCESS_QUEUE, "文件报文提交失败，处理线程池已满");
                     LOGGER.error("数据处理线程池已满，本次FEP UDP报文已拒绝，接口编号：{}",
                             config.getInterfaceId(), exception);
                 }
@@ -143,6 +159,7 @@ public class FepProtocolHandler implements ProtocolHandler {
 
         /** 处理一条完整FEP UDP报文。 */
         private void process(UdpTool.ReceivedPacket packet) {
+            String fileContext = "报文长度：" + packet.getData().length;
             try {
                 FepPacketType packetType =
                         FepProtocolTool.readPacketType(packet.getData());
@@ -151,6 +168,7 @@ public class FepProtocolHandler implements ProtocolHandler {
                         FepProtocolTool.SendRequest request =
                                 FepProtocolTool.parseSendRequest(
                                         packet.getData());
+                        fileContext = "文件名：" + request.getFileName() + "；声明长度：" + request.getFileLength();
                         LOGGER.info(
                                 "FEP UDP第一步：收到01发送请求包，接口编号：{}，文件名：{}，文件长度：{}",
                                 config.getInterfaceId(),
@@ -183,6 +201,7 @@ public class FepProtocolHandler implements ProtocolHandler {
                     case DATA:
                         FepFileReceiver.DataReceiveResult result =
                                 fileReceiver.receiveData(packet.getData());
+                        fileContext = "文件名：" + result.getFileName() + "；单元号：" + result.getUnitNumber() + "；文件标识：" + result.getFileId();
                         LOGGER.info(
                                 "FEP UDP第三步：收到04文件数据包，接口编号：{}，文件名：{}，单元号：{}，文件标识：{}",
                                 config.getInterfaceId(),
@@ -216,6 +235,7 @@ public class FepProtocolHandler implements ProtocolHandler {
                         break;
                 }
             } catch (Exception exception) {
+                alarm(config, com.example.common.enums.DataAlarmType.FILE_RECEIVE, fileContext + "；文件协议报文失败：" + exception.getMessage());
                 LOGGER.warn("FEP UDP协议包处理失败，接口编号：{}，原因：{}",
                         config.getInterfaceId(), exception.getMessage());
             }
@@ -308,8 +328,14 @@ public class FepProtocolHandler implements ProtocolHandler {
                             .handle((ignored, exception) -> null)
                             .thenRunAsync(
                                     () -> process(connection, packetCopy),
-                                    dataProcessExecutor);
+                                    dataProcessExecutor).whenComplete((ignored, failure) -> {
+                                        if (failure != null) {
+                                            alarm(config, com.example.common.enums.DataAlarmType.PROCESS_QUEUE,
+                                                    "文件报文异步提交失败，当前报文未处理：" + failure.getMessage());
+                                        }
+                                    });
                 } catch (RejectedExecutionException exception) {
+                    alarm(config, com.example.common.enums.DataAlarmType.PROCESS_QUEUE, "文件报文提交失败，处理线程池已满");
                     LOGGER.error("数据处理线程池已满，本次FEP TCP协议包已拒绝，接口编号：{}",
                             config.getInterfaceId(), exception);
                 }
@@ -320,6 +346,7 @@ public class FepProtocolHandler implements ProtocolHandler {
         private void process(
                 TcpTool.TcpConnection connection,
                 byte[] packetData) {
+            String fileContext = "报文长度：" + packetData.length;
             try {
                 FepPacketType packetType =
                         FepProtocolTool.readPacketType(packetData);
@@ -327,6 +354,7 @@ public class FepProtocolHandler implements ProtocolHandler {
                     case SEND_REQUEST:
                         FepProtocolTool.SendRequest request =
                                 FepProtocolTool.parseSendRequest(packetData);
+                        fileContext = "文件名：" + request.getFileName() + "；声明长度：" + request.getFileLength();
                         LOGGER.info(
                                 "FEP TCP第一步：收到01发送请求包，接口编号：{}，文件名：{}，文件长度：{}",
                                 config.getInterfaceId(),
@@ -361,6 +389,7 @@ public class FepProtocolHandler implements ProtocolHandler {
                     case DATA:
                         FepFileReceiver.DataReceiveResult result =
                                 fileReceiver.receiveData(packetData);
+                        fileContext = "文件名：" + result.getFileName() + "；单元号：" + result.getUnitNumber() + "；文件标识：" + result.getFileId();
                         LOGGER.info(
                                 "FEP TCP第三步：收到04文件数据包，接口编号：{}，文件名：{}，单元号：{}，文件标识：{}",
                                 config.getInterfaceId(),
@@ -392,6 +421,7 @@ public class FepProtocolHandler implements ProtocolHandler {
                         break;
                 }
             } catch (Exception exception) {
+                alarm(config, com.example.common.enums.DataAlarmType.FILE_RECEIVE, fileContext + "；文件协议报文失败：" + exception.getMessage());
                 LOGGER.warn("FEP TCP协议包处理失败，接口编号：{}，原因：{}",
                         config.getInterfaceId(), exception.getMessage());
             }

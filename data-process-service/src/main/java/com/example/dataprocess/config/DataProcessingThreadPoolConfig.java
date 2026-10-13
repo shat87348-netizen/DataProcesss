@@ -65,7 +65,7 @@ public class DataProcessingThreadPoolConfig {
     }
 
     /** 创建带中文名称和自增编号的守护线程工厂。 */
-    private ThreadFactory namedThreadFactory(String prefix) {
+    public static ThreadFactory namedThreadFactory(String prefix) {
         AtomicInteger sequence = new AtomicInteger(1);
         return task -> {
             // 所有线程都由统一线程池创建，不为接口手工维护Thread对象。

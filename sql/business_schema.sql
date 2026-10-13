@@ -142,29 +142,6 @@ COMMENT ON COLUMN processing_rule_config.compression_archive_enabled IS '数据�
 COMMENT ON COLUMN processing_rule_config.create_time IS '创建时间';
 COMMENT ON COLUMN processing_rule_config.update_time IS '更新时间';
 
--- 数据处理日志表：只记录页面展示需要的基本日志信息。
-CREATE TABLE IF NOT EXISTS data_process_log (
-    id BIGSERIAL PRIMARY KEY,
-    task_id VARCHAR(100) NOT NULL,
-    process_task_id BIGINT,
-    log_time TIMESTAMP NOT NULL,
-    log_level SMALLINT NOT NULL DEFAULT 1,
-    log_content VARCHAR(500) NOT NULL,
-    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-COMMENT ON TABLE data_process_log IS '数据处理日志表';
-COMMENT ON COLUMN data_process_log.id IS '日志主键ID';
-COMMENT ON COLUMN data_process_log.task_id IS '外部试验任务编号';
-COMMENT ON COLUMN data_process_log.process_task_id IS '数据处理任务ID';
-COMMENT ON COLUMN data_process_log.log_time IS '日志发生时间';
-COMMENT ON COLUMN data_process_log.log_level IS '日志级别：1信息 2警告 3错误';
-COMMENT ON COLUMN data_process_log.log_content IS '页面展示的日志内容';
-COMMENT ON COLUMN data_process_log.create_time IS '创建时间';
-
-CREATE INDEX IF NOT EXISTS idx_data_process_log_task_time
-    ON data_process_log (task_id, log_time DESC);
-
 -- 数据监测告警事件表
 CREATE TABLE IF NOT EXISTS dm_alarm_event (
     id BIGSERIAL PRIMARY KEY,
@@ -172,23 +149,34 @@ CREATE TABLE IF NOT EXISTS dm_alarm_event (
     alarm_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     source_name VARCHAR(100) NOT NULL,
     alarm_msg VARCHAR(500) NOT NULL,
-    alarm_level INT NOT NULL DEFAULT 1,
+    alarm_level INT NOT NULL DEFAULT 2,
     alarm_status INT NOT NULL DEFAULT 0,
     task_name VARCHAR(100),
     channel_code VARCHAR(100),
     trigger_rule VARCHAR(200),
     is_deleted INT NOT NULL DEFAULT 0,
     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    event_type VARCHAR(100),
+    interface_id BIGINT,
+    process_task_id BIGINT,
+    calib_channel_id BIGINT,
+    tm_symbol VARCHAR(200),
+    parameter_name VARCHAR(200),
+    alarm_detail TEXT,
+    trigger_count INT NOT NULL DEFAULT 1,
+    last_trigger_time TIMESTAMP,
+    recover_time TIMESTAMP,
+    dedup_key VARCHAR(100)
 );
 
 COMMENT ON TABLE dm_alarm_event IS '数据监测告警事件表';
 COMMENT ON COLUMN dm_alarm_event.id IS '主键ID';
 COMMENT ON COLUMN dm_alarm_event.task_id IS '外部试验任务编号';
 COMMENT ON COLUMN dm_alarm_event.alarm_time IS '告警时间';
-COMMENT ON COLUMN dm_alarm_event.source_name IS '告警来源';
+COMMENT ON COLUMN dm_alarm_event.source_name IS '告警来源英文编码：COLLECTION数据采集、PROCESSING数据处理、CALIBRATION数据校准';
 COMMENT ON COLUMN dm_alarm_event.alarm_msg IS '告警信息';
-COMMENT ON COLUMN dm_alarm_event.alarm_level IS '告警级别：1提示 2一般 3轻微 4严重 5紧急';
+COMMENT ON COLUMN dm_alarm_event.alarm_level IS '2一般、4严重';
 COMMENT ON COLUMN dm_alarm_event.alarm_status IS '处理状态：0未处理 1已处理';
 COMMENT ON COLUMN dm_alarm_event.task_name IS '任务名称（历史快照）';
 COMMENT ON COLUMN dm_alarm_event.channel_code IS '通道编码';
@@ -200,26 +188,45 @@ COMMENT ON COLUMN dm_alarm_event.update_time IS '更新时间';
 CREATE INDEX IF NOT EXISTS idx_dm_alarm_event_task_id ON dm_alarm_event (task_id);
 
 -- 系统告警事件表
+
+COMMENT ON COLUMN dm_alarm_event.event_type IS '自动告警事件类型编码';
+COMMENT ON COLUMN dm_alarm_event.interface_id IS '采集接口ID';
+COMMENT ON COLUMN dm_alarm_event.process_task_id IS '处理任务ID，无法确定时为空';
+COMMENT ON COLUMN dm_alarm_event.calib_channel_id IS '校准通道ID';
+COMMENT ON COLUMN dm_alarm_event.tm_symbol IS '遥测参数代号';
+COMMENT ON COLUMN dm_alarm_event.parameter_name IS '参数名称快照';
+COMMENT ON COLUMN dm_alarm_event.alarm_detail IS '完整中文告警详情';
+COMMENT ON COLUMN dm_alarm_event.trigger_count IS '累计触发次数';
+COMMENT ON COLUMN dm_alarm_event.last_trigger_time IS '最近触发时间';
+COMMENT ON COLUMN dm_alarm_event.recover_time IS '自动恢复时间，独立于人工处理状态';
+COMMENT ON COLUMN dm_alarm_event.dedup_key IS '后台同对象同参数的告警合并键';
 CREATE TABLE IF NOT EXISTS sys_alarm_event (
     id BIGSERIAL PRIMARY KEY,
     alarm_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     obj_name VARCHAR(100) NOT NULL,
     alarm_type VARCHAR(100) NOT NULL,
     alarm_content VARCHAR(500) NOT NULL,
-    alarm_level INT DEFAULT 1 NOT NULL,
+    alarm_level INT DEFAULT 2 NOT NULL,
     alarm_status INT DEFAULT 0 NOT NULL,
     is_deleted INT NOT NULL DEFAULT 0,
     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    metric_code VARCHAR(100),
+    current_value NUMERIC(14,2),
+    threshold_value NUMERIC(14,2),
+    first_alarm_time TIMESTAMP,
+    last_alarm_time TIMESTAMP,
+    recover_time TIMESTAMP,
+    trigger_count INT NOT NULL DEFAULT 1
 );
 
 COMMENT ON TABLE sys_alarm_event IS '系统告警事件表';
 COMMENT ON COLUMN sys_alarm_event.id IS '主键ID';
 COMMENT ON COLUMN sys_alarm_event.alarm_time IS '告警时间';
 COMMENT ON COLUMN sys_alarm_event.obj_name IS '系统对象';
-COMMENT ON COLUMN sys_alarm_event.alarm_type IS '告警类型';
+COMMENT ON COLUMN sys_alarm_event.alarm_type IS '系统告警类型英文编码，复用系统监测指标枚举';
 COMMENT ON COLUMN sys_alarm_event.alarm_content IS '告警内容';
-COMMENT ON COLUMN sys_alarm_event.alarm_level IS '告警级别：1提示 2一般 3严重';
+COMMENT ON COLUMN sys_alarm_event.alarm_level IS '2一般、3严重';
 COMMENT ON COLUMN sys_alarm_event.alarm_status IS '告警状态：0未恢复 1已恢复';
 COMMENT ON COLUMN sys_alarm_event.is_deleted IS '是否删除：0否 1是';
 COMMENT ON COLUMN sys_alarm_event.create_time IS '创建时间';
@@ -227,6 +234,14 @@ COMMENT ON COLUMN sys_alarm_event.update_time IS '更新时间';
 
 -- 系统健康状态快照表：每 5 秒采集一次，仅保留最近 7 天。
 -- 此表与已有数据监测告警表完全独立，不能混用。
+
+COMMENT ON COLUMN sys_alarm_event.metric_code IS '系统监测指标编码';
+COMMENT ON COLUMN sys_alarm_event.current_value IS '当前指标值';
+COMMENT ON COLUMN sys_alarm_event.threshold_value IS '触发阈值';
+COMMENT ON COLUMN sys_alarm_event.first_alarm_time IS '首次触发时间';
+COMMENT ON COLUMN sys_alarm_event.last_alarm_time IS '最近异常时间';
+COMMENT ON COLUMN sys_alarm_event.recover_time IS '自动恢复时间';
+COMMENT ON COLUMN sys_alarm_event.trigger_count IS '连续异常触发次数';
 CREATE TABLE IF NOT EXISTS sys_monitor_snapshot (
     id BIGSERIAL PRIMARY KEY,
     sample_time TIMESTAMP NOT NULL,
@@ -265,53 +280,13 @@ COMMENT ON COLUMN sys_monitor_snapshot.disk_usage_percent IS '磁盘使用率，
 COMMENT ON COLUMN sys_monitor_snapshot.health_score IS '综合健康评分，范围0至100';
 COMMENT ON COLUMN sys_monitor_snapshot.create_time IS '记录创建时间';
 
--- 系统健康告警表：只记录系统资源与服务健康事件，不使用 sys_alarm_event。
-CREATE TABLE IF NOT EXISTS sys_health_alarm_event (
-    id BIGSERIAL PRIMARY KEY,
-    alarm_time TIMESTAMP NOT NULL,
-    target_name VARCHAR(100) NOT NULL,
-    metric_code VARCHAR(50) NOT NULL,
-    alarm_level INT NOT NULL,
-    alarm_content VARCHAR(500) NOT NULL,
-    alarm_status INT NOT NULL DEFAULT 0,
-    current_value NUMERIC(14,2),
-    threshold_value NUMERIC(14,2),
-    first_alarm_time TIMESTAMP NOT NULL,
-    last_alarm_time TIMESTAMP NOT NULL,
-    recover_time TIMESTAMP,
-    trigger_count INT NOT NULL DEFAULT 1,
-    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_sys_health_alarm_status_time
-    ON sys_health_alarm_event (alarm_status, last_alarm_time DESC);
-
-COMMENT ON TABLE sys_health_alarm_event IS '系统资源与服务健康告警事件表';
-COMMENT ON COLUMN sys_health_alarm_event.id IS '健康告警主键ID';
-COMMENT ON COLUMN sys_health_alarm_event.alarm_time IS '告警发生时间';
-COMMENT ON COLUMN sys_health_alarm_event.target_name IS '告警目标名称';
-COMMENT ON COLUMN sys_health_alarm_event.metric_code IS '监控指标编码';
-COMMENT ON COLUMN sys_health_alarm_event.alarm_level IS '告警级别';
-COMMENT ON COLUMN sys_health_alarm_event.alarm_content IS '告警内容';
-COMMENT ON COLUMN sys_health_alarm_event.alarm_status IS '告警状态：0未恢复、1已恢复';
-COMMENT ON COLUMN sys_health_alarm_event.current_value IS '当前指标值';
-COMMENT ON COLUMN sys_health_alarm_event.threshold_value IS '告警阈值';
-COMMENT ON COLUMN sys_health_alarm_event.first_alarm_time IS '首次告警时间';
-COMMENT ON COLUMN sys_health_alarm_event.last_alarm_time IS '最近一次告警时间';
-COMMENT ON COLUMN sys_health_alarm_event.recover_time IS '告警恢复时间';
-COMMENT ON COLUMN sys_health_alarm_event.trigger_count IS '连续触发次数';
-COMMENT ON COLUMN sys_health_alarm_event.create_time IS '记录创建时间';
-COMMENT ON COLUMN sys_health_alarm_event.update_time IS '记录更新时间';
-
 -- 校准通道配置表
 CREATE TABLE IF NOT EXISTS calib_channel_config (
     id BIGSERIAL PRIMARY KEY,
     task_id VARCHAR(100),
     channel_name VARCHAR(100) NOT NULL,
-    channel_type INT NOT NULL,
     calibration_formula VARCHAR(100) NOT NULL,
-    normal_range VARCHAR(50) NOT NULL,
+    normal_range VARCHAR(50),
     detect_method INT NOT NULL,
     sigma_value INT,
     fluctuation_rate DOUBLE PRECISION,
@@ -332,9 +307,8 @@ COMMENT ON TABLE calib_channel_config IS '校准通道配置表';
 COMMENT ON COLUMN calib_channel_config.id IS '自增主键ID';
 COMMENT ON COLUMN calib_channel_config.task_id IS '外部试验任务编号';
 COMMENT ON COLUMN calib_channel_config.channel_name IS '通道名称';
-COMMENT ON COLUMN calib_channel_config.channel_type IS '通道类型：1温度传感器 2电压传感器 3电流传感器 4功率传感器 5姿态传感器';
 COMMENT ON COLUMN calib_channel_config.calibration_formula IS '校准公式';
-COMMENT ON COLUMN calib_channel_config.normal_range IS '正常范围，如0~36V';
+COMMENT ON COLUMN calib_channel_config.normal_range IS '正常范围，如0~36V，仅阈值法必填';
 COMMENT ON COLUMN calib_channel_config.detect_method IS '野值检测方法：1莱特准则 2阈值法 3肖维涅法';
 COMMENT ON COLUMN calib_channel_config.sigma_value IS 'σ倍数，用于莱特准则，如3表示3σ';
 COMMENT ON COLUMN calib_channel_config.fluctuation_rate IS '波动阈值百分比，用于阈值法，如10.5表示10.5%';
@@ -504,8 +478,9 @@ BEGIN
           AND contype = 'u'
           AND pg_get_constraintdef(oid) = 'UNIQUE (task_id, device_satellite_id, telemetry_code)'
     LOOP
-        EXECUTE 'ALTER TABLE processed_telemetry_filter_selection DROP CONSTRAINT '
-                || quote_ident(old_constraint.conname);
+        -- 使用函数拼接语句，兼容将双竖线解释为逻辑或的数据库模式。
+        EXECUTE concat('ALTER TABLE processed_telemetry_filter_selection DROP CONSTRAINT ',
+                       quote_ident(old_constraint.conname));
     END LOOP;
 END $$;
 CREATE UNIQUE INDEX IF NOT EXISTS uk_telemetry_selection_scope
@@ -563,12 +538,12 @@ COMMENT ON COLUMN collect_interface_config.interface_type IS '接口类型：1�
 COMMENT ON COLUMN collect_interface_config.send_from IS '发送方标识';
 COMMENT ON COLUMN collect_interface_config.message_content IS '消息内容';
 COMMENT ON COLUMN collect_interface_config.transfer_type IS '传输方式：1UDP 2TCP 3HTTP';
-COMMENT ON COLUMN collect_interface_config.transfer_protocol IS '传输协议：1JSON 2PDXP 3Protobuf 4FEP';
+COMMENT ON COLUMN collect_interface_config.transfer_protocol IS '传输协议：1JSON 2PDXP 3FEP';
 COMMENT ON COLUMN collect_interface_config.protocol_config_id IS '协议配置ID';
 COMMENT ON COLUMN collect_interface_config.host IS '数据处理服务本机监听网卡IP地址';
 COMMENT ON COLUMN collect_interface_config.port IS '数据处理服务本机监听端口';
 COMMENT ON COLUMN collect_interface_config.multicast_ip IS 'UDP组播地址，为空时按UDP单播接收';
-COMMENT ON COLUMN collect_interface_config.status IS '状态：0离线 1在线 2异常';
+COMMENT ON COLUMN collect_interface_config.status IS '在线状态：0离线 1在线，由启用状态决定';
 COMMENT ON COLUMN collect_interface_config.enabled IS '启用状态：0禁用 1启用';
 COMMENT ON COLUMN collect_interface_config.data_packet_count IS '累计数据包数量';
 COMMENT ON COLUMN collect_interface_config.remark IS '接口备注';
@@ -685,8 +660,8 @@ COMMENT ON TABLE sys_runtime_log IS '系统日志表';
 COMMENT ON COLUMN sys_runtime_log.id IS '自增主键';
 COMMENT ON COLUMN sys_runtime_log.task_id IS '外部试验任务编号';
 COMMENT ON COLUMN sys_runtime_log.log_time IS '时间';
-COMMENT ON COLUMN sys_runtime_log.log_level IS '日志级别：DEBUG调试 INFO信息 WARN警告 ERROR错误';
-COMMENT ON COLUMN sys_runtime_log.log_source IS '来源';
+COMMENT ON COLUMN sys_runtime_log.log_level IS '操作日志级别：INFO信息、WARN警告、ERROR错误';
+COMMENT ON COLUMN sys_runtime_log.log_source IS '操作日志来源英文枚举编码，中文名称由接口枚举返回';
 COMMENT ON COLUMN sys_runtime_log.operator_id IS '操作人ID';
 COMMENT ON COLUMN sys_runtime_log.log_content IS '内容';
 COMMENT ON COLUMN sys_runtime_log.log_detail IS '详情';
@@ -789,3 +764,7 @@ ON CONFLICT (task_id, selection_type, target_id, device_satellite_id, telemetry_
 DO NOTHING;
 
 COMMIT;
+
+-- 自动告警查询与合并使用的索引。
+CREATE INDEX IF NOT EXISTS idx_sys_alarm_metric_status ON sys_alarm_event (metric_code, alarm_status, last_alarm_time);
+CREATE INDEX IF NOT EXISTS idx_dm_alarm_dedup_time ON dm_alarm_event (dedup_key, last_trigger_time);

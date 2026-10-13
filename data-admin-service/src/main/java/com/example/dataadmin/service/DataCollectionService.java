@@ -5,8 +5,6 @@ import com.example.dataadmin.dto.collection.InterfaceQueryRequest;
 import com.example.dataadmin.dto.collection.InterfaceSaveRequest;
 import com.example.dataadmin.dto.collection.ProtocolSaveRequest;
 import com.example.dataadmin.entity.CollectInterfaceConfig;
-import com.example.dataadmin.entity.SysRuntimeLog;
-import com.example.dataadmin.vo.collection.CollectionEventOverviewVO;
 import com.example.dataadmin.vo.collection.CollectionOverviewVO;
 import com.example.dataadmin.vo.collection.ProtocolConfigVO;
 
@@ -57,9 +55,5 @@ public interface DataCollectionService {
     /** 修改协议配置启用状态。 */
     void updateProtocolEnabled(Long id, Integer enabled);
 
-    /** 查询采集事件统计。 */
-    CollectionEventOverviewVO getEventOverview(String taskId);
 
-    /** 查询最近的采集事件。 */
-    List<SysRuntimeLog> listEvents(String taskId, Integer limit);
 }

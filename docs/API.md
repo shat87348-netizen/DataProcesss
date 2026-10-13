@@ -160,14 +160,14 @@ Authorization: Bearer <token>
 | GET | `/collection/protocols/{id}` | 协议配置详情 | 路径：`id` |
 | POST | `/collection/protocols/create` | 新增协议配置 | `ProtocolSaveRequest` |
 | POST | `/collection/protocols/update` | 修改协议配置 | `ProtocolSaveRequest`，`id` 必填 |
-| POST | `/collection/protocols/delete` | 删除协议配置 | JSON：`id` |
+| POST | `/collection/protocols/delete` | 删除协议配置；存在未删除采集接口绑定时禁止删除，提示绑定接口名称，不区分启用状态 | JSON：`id` |
 | POST | `/collection/protocols/enabled` | 启用/禁用协议配置 | JSON：`id`、`enabled`（0/1） |
-| GET | `/collection/events/overview` | 采集事件统计 | 查询：`taskId?` |
-| GET | `/collection/events` | 最近采集事件 | 查询：`taskId?` |
 
 采集事件列表中的 `logLevel` 返回稳定枚举编码，`logLevelName` 返回对应中文名称（调试、信息、警告、错误）。
 
-`InterfaceSaveRequest`：`id`、`taskId`、`interfaceName`、`interfaceType`、`sendFrom`、`messageContent`、`transferType`、`transferProtocol`、`protocolConfigId`、`host`、`port`、`status`、`enabled`、`rpcEnabled`、`remark`。其中 `transferProtocol` 为整数枚举：1 JSON、2 PDXP、3 Protobuf、4 FEP；`port` 范围为 1～65535；`rpcEnabled` 为 0 时使用本地处理，为 1 时进入 RPC 处理流程。两种处理方式都必须传 `protocolConfigId`，采集接口不再接收或返回 `sheetName`。
+`InterfaceSaveRequest`：`id`、`taskId`、`interfaceName`、`interfaceType`、`sendFrom`、`messageContent`、`transferType`、`transferProtocol`、`protocolConfigId`、`host`、`port`、`enabled`、`rpcEnabled`、`remark`。其中 `transferProtocol` 为整数枚举：1 JSON、2 PDXP、3 FEP；`port` 范围为 1～65535；`rpcEnabled` 为 0 时使用本地处理，为 1 时进入 RPC 处理流程。两种处理方式都必须传 `protocolConfigId`，采集接口不再接收或返回 `sheetName`。
+
+采集接口新增、修改不再接收 `status`，前端只提交 `enabled`；未传 `enabled` 时沿用默认启用。列表和详情返回的 `status`、`statusName` 完全由启用开关决定：`enabled=1` 返回 `status=1`、`statusName=在线`，禁用返回 `status=0`、`statusName=离线`，不提供异常状态。列表的可选 `status` 筛选仅接受 `0`、`1`，实际按 `enabled` 查询，`0` 不会被忽略。`/collection/findData`、`/dashboard/findData` 的状态枚举同步为离线、在线。首页采集总览的在线接口数量按启用接口统计，发送方聚合行有任一启用接口即显示在线、全部禁用显示离线；Redis中的历史状态不影响这些结果。数据库 `status` 列保留兼容，旧记录无需迁移。
 
 `ProtocolSaveRequest`：`id`、`taskId`、`configName`、`protocolType`（1 JSON/2 PDXP/3 Protobuf/4 RPC）、`dataSourceType`（1 遥测/2 遥感/3 设备/4 环境）、`configDesc`、`configParams`、`parserClass`、`enabled`。
 
@@ -269,6 +269,9 @@ RPC字段属性：`field`为`FrameRequest`字段名，`fieldName`为中文名称
 
 | 方法 | 地址 | 说明 | 参数 |
 | --- | --- | --- | --- |
+| GET | `/visualization/config/export` | 下载当前用户整页JSON配置文件 | 查询：`taskId`（必填） |
+| POST | `/visualization/config/import/preview` | 只读检查配置及目标任务关联 | 查询：`taskId`（必填）；表单：`file` |
+| POST | `/visualization/config/import` | 重新检查并事务替换当前用户整页配置 | 查询：`taskId`（必填）；表单：`file` |
 | GET | `/visualization/widgets` | 当前用户组件列表 | 查询：`taskId`（必填） |
 | GET | `/visualization/widgets/{id}` | 组件详情 | 路径：`id` |
 | POST | `/visualization/widgets/create` | 新增组件 | `WidgetSaveRequest` |
@@ -281,9 +284,13 @@ RPC字段属性：`field`为`FrameRequest`字段名，`fieldName`为中文名称
 | POST | `/visualization/items/delete` | 删除数据项 | JSON：`id` |
 | POST | `/visualization/items/selected` | 修改勾选状态 | JSON：`id`、`status`（0/1） |
 
-`WidgetSaveRequest`：`id`、`taskId`、`widgetKey`、`widgetType`（1 实时曲线/2 实时数据/3 实时告警/4 载荷图像）、`widgetTitle`、`gridX`、`gridY`、`gridWidth`、`gridHeight`、`enabled`。
+`WidgetSaveRequest`：`id`、`taskId`、`widgetKey`、`widgetType`（1 实时曲线/2 实时数据/3 实时告警/4 载荷图像/5 文件表格）、`widgetTitle`、`gridX`、`gridY`、`gridWidth`、`gridHeight`、`enabled`。
 
 `WidgetItemSaveRequest`：`id`、`widgetId`、`parseRuleId`、`interfaceId`、`protocolConfigId`、`itemCode`、`itemName`、`isSelected`。`parseRuleId` 对应参数解析配置主键；自动同步产生的筛选项不绑定单一采集接口或协议，`interfaceId`、`protocolConfigId` 可以为空。
+
+配置导入导出：成功导出直接返回JSON附件，不包裹统一响应；配置文件包含`schemaVersion=1`、`exportedAt`及`widgets`。每个组件包含类型、标题、显示状态、网格位置大小、非遥测数据项`items`和已勾选遥测参数`selectedParameters`。每条已勾选参数包含设备卫星类型、编码、名称、遥测代号、名称、系统完整路径以及已有数据项`dataItems`；参数由“设备卫星类型＋设备卫星编码＋遥测代号”匹配，名称和系统路径仅用于核对。中文枚举名称随文件返回，导入忽略中文展示名称，复用现有枚举编码。
+
+检查和导入使用`multipart/form-data`上传同一`.json`文件，最大10MB、最多500个组件，参数勾选和数据项合计最多50000条。检查结果包含`valid`、`widgetCount`、`parameterCount`、`itemCount`、`existingWidgetCount`、`errors`；最多返回100条中文问题。检查不写库；实际导入在任务锁内重新检查，任意参数缺失、接口或协议名称缺失／重名、非法配置均阻止导入。全部通过后同一事务替换当前用户目标任务的组件、数据项和组件勾选，失败整体回滚，其他用户及固定处理后数据页面不受影响。导入生成新组件主键，成功后重新查询组件列表并刷新筛选树；显式`widgets: []`表示清空该用户目标任务页面，组件列表缺失或为空值不允许导入。详细流程见`前端对接-可视化配置导入导出.md`。
 
 ## 7. 试验任务
 
@@ -296,10 +303,9 @@ RPC字段属性：`field`为`FrameRequest`字段名，`fieldName`为中文名称
 | 方法 | 地址 | 说明 | 参数 |
 | --- | --- | --- | --- |
 | GET | `/processing/overview` | 今日处理量和累计去重总览 | 查询：`taskId`（必填） |
-| GET | `/processing/realtime` | 实时处理速率、CPU和内存监控 | 查询：`taskId`（必填） |
+| GET | `/processing/realtime` | 当前任务所有接口PDXP帧处理速率之和、与系统告警同口径的机器CPU及物理内存使用率 | 查询：`taskId`（必填） |
 | GET | `/processing/rule-config` | 查询处理规则开关 | 查询：`taskId`（必填） |
 | POST | `/processing/rule-config/update` | 保存处理规则开关 | `ProcessingRuleConfigRequest` |
-| GET | `/processing/logs` | 分页查询处理日志 | 查询：`taskId?`、`processTaskId?`、`logLevel?`、`pageNum=1`、`pageSize=20` |
 | GET | `/processing/device-satellites` | 设备卫星筛选列表 | `taskId` 必填，`type` 可选；类型为空时查询全部；返回 `id`、`code`、`name`、`type` |
 | GET | `/processing/rules` | 遥测解析规则列表 | 必填：`taskId`、`deviceSatelliteId` |
 | POST | `/processing/rules/import` | Excel或TXT按类型替换导入 | `multipart/form-data`：`taskId`、`type`、`file` |
@@ -325,7 +331,7 @@ RPC字段属性：`field`为`FrameRequest`字段名，`fieldName`为中文名称
 | GET | `/calibration/records` | 分页查询校准记录汇总 | 查询：`taskId`、`pageNum=1`、`pageSize=20` |
 | GET | `/calibration/records/{id}` | 查询记录汇总和分页野值详情 | 路径：`id`；查询：`taskId`、`pageNum=1`、`pageSize=20` |
 
-`ChannelSaveRequest`：`id`、`taskId`、`channelName`、`channelType`（1 温度/2 电压/3 电流/4 功率/5 姿态传感器）、`calibrationFormula`（校准公式，与每个遥测参数的 calibration_formula 对应）、`normalRange`、`detectMethod`（1 莱特准则/2 阈值法/3 肖维涅法）、`sigmaValue`（莱特准则σ倍数，1至5）、`fluctuationRate`（阈值百分比，大于0且不超过100）、`chauvenetCoef`（肖维涅判别常数，固定0.5）、`minSampleCount`（肖维涅法参与计算的最近样本数，不小于3）、`iterateCount`（肖维涅法迭代次数，1至3）、`sampleWindow`（莱特准则最近样本窗口，不小于3）、`dynamicUpdate`、`autoClean`（是否自动排除异常值）、`enabled`、`channelStatus`。只校验当前检测方法对应的专用参数。
+`ChannelSaveRequest`：`id`、`taskId`、`channelName`、`calibrationFormula`（校准公式，与每个遥测参数的 calibration_formula 对应）、`normalRange`（仅阈值法必填，其他算法可不填；填写时校验格式）、`detectMethod`（1 莱特准则/2 阈值法/3 肖维涅法）、`sigmaValue`（莱特准则σ倍数，1至5）、`fluctuationRate`（阈值百分比，大于0且不超过100）、`chauvenetCoef`（肖维涅判别常数，固定0.5）、`minSampleCount`（肖维涅法参与计算的最近样本数，不小于3）、`iterateCount`（肖维涅法迭代次数，1至3）、`sampleWindow`（莱特准则最近样本窗口，不小于3）、`dynamicUpdate`、`autoClean`（是否自动排除异常值）、`enabled`、`channelStatus`。只校验当前检测方法对应的专用参数。修改时不传正常范围保留原值；非阈值法传空字符串可清空正常范围。
 
 新增校准通道时自动创建一条野值数量为 0 的校准记录。通道与记录一对一，野值详情与记录一对多；记录由数据处理流程维护，不提供手工新增、修改和删除接口。数据处理服务每 5 秒批量保存野值详情，并按全局唯一的校准通道 ID 累加汇总数量。
 
@@ -335,43 +341,83 @@ RPC字段属性：`field`为`FrameRequest`字段名，`fieldName`为中文名称
 | --- | --- | --- | --- |
 | GET | `/alarms/system-monitor/current` | 当前系统健康状态 | 无参数 |
 | GET | `/alarms/system-monitor/history` | 系统健康趋势 | 查询：`minutes=60` |
-| GET | `/alarms/system-monitor/events` | 系统健康告警事件 | 查询：`status?` |
-| GET | `/alarms/data` | 组合筛选并分页查询数据告警 | 查询：`taskId?`、`sourceName?`、`keyword?`、`alarmLevel?`、`alarmStatus?`、`startTime?`、`endTime?`、`pageNum=1`、`pageSize=20` |
-| GET | `/alarms/data/sources` | 数据告警来源下拉选项 | 查询：`taskId?` |
+| GET | `/alarms/data` | 组合筛选并分页查询数据告警 | 查询：`taskId?`、`sourceCode?`、`keyword?`、`alarmLevel?`、`alarmStatus?`、`startTime?`、`endTime?`、`pageNum=1`、`pageSize=20` |
+| GET | `/alarms/findData` | 告警来源、类型、级别和状态等枚举选项 | 无 |
 | GET | `/alarms/data/{id}` | 数据告警详情 | 路径：`id` |
-| POST | `/alarms/data/create` | 新增数据告警 | `DataAlarmSaveRequest` |
-| POST | `/alarms/data/update` | 修改数据告警 | `DataAlarmSaveRequest`，`id` 必填 |
-| POST | `/alarms/data/delete` | 删除数据告警 | JSON：`id` |
-| POST | `/alarms/data/status` | 处理/恢复数据告警 | JSON：`id`、`status`（0/1） |
-| GET | `/alarms/system` | 系统告警列表 | 无参数 |
-| GET | `/alarms/system/{id}` | 系统告警详情 | 路径：`id` |
-| POST | `/alarms/system/create` | 新增系统告警 | `SystemAlarmSaveRequest` |
-| POST | `/alarms/system/update` | 修改系统告警 | `SystemAlarmSaveRequest`，`id` 必填 |
-| POST | `/alarms/system/delete` | 删除系统告警 | JSON：`id` |
-| POST | `/alarms/system/status` | 恢复/重新打开系统告警 | JSON：`id`、`status`（0/1） |
+| POST | `/alarms/data/status` | 标记数据告警人工处理状态 | JSON：`id`、`status`（0/1） |
+| GET | `/alarms/system` | 唯一系统告警列表 | 查询：`status?`（0未恢复、1已恢复） |
 
-`DataAlarmSaveRequest`：`id`、`taskId`、`alarmTime`、`sourceName`、`alarmMsg`、`alarmLevel`（1～5）、`alarmStatus`、`taskName`、`channelCode`、`triggerRule`。
+数据告警来源固定为 `COLLECTION` 数据采集、`PROCESSING` 数据处理、`CALIBRATION` 数据校准。`/alarms/findData` 中 `dataAlarmSource` 返回英文 `value` 和中文 `label`；来源筛选使用 `sourceCode`，不接受中文名称。数据库沿用 `source_name` 列保存英文编码，查询返回 `sourceCode` 编码和 `sourceName` 中文名称。旧数据不迁移。列表和详情新增 `eventType`、`eventTypeName`、`interfaceId`、`processTaskId`、`calibChannelId`、`tmSymbol`、`parameterName`、`alarmDetail`、`triggerCount`、`lastTriggerTime`、`recoverTime`。人工 `alarmStatus` 与自动 `recoverTime` 分开维护。数据告警只由后台自动录入，不提供人工创建、内容修改和删除接口；`POST /alarms/data/status` 保留，`status=0` 表示未处理、`status=1` 表示已处理，操作会写入系统日志。
 
-数据告警列表的 `sourceName` 为来源精确匹配；`keyword` 会模糊匹配来源、告警信息、任务名称、通道编码和触发规则；时间范围使用 ISO 8601 格式并包含起止时间。
+数据告警列表的 `sourceCode` 为来源编码精确匹配；`keyword` 会模糊匹配来源、告警信息、任务名称、通道编码和触发规则；时间范围使用 ISO 8601 格式并包含起止时间。
 
-`SystemAlarmSaveRequest`：`id`、`alarmTime`、`objName`、`alarmType`、`alarmContent`、`alarmLevel`（1～3）、`alarmStatus`。
+系统告警类型 `alarmType` 保存监测指标英文编码，`alarmTypeName` 返回中文名称，类型选项从 `/alarms/findData` 的 `systemAlarmType` 获取。系统告警只由后台自动写入，统一保存到 `sys_alarm_event`，不开放人工创建、修改、删除及恢复接口。列表保留原字段，并返回指标编码/中文名称、当前值、阈值、首次和最近触发时间、恢复时间及触发次数。
 
 ## 11. 系统日志
 
 | 方法 | 地址 | 说明 | 参数 |
 | --- | --- | --- | --- |
 | GET | `/system/logs` | 组合筛选并分页查询系统日志 | 查询：`taskId?`、`logLevel?`、`logSource?`、`operatorId?`、`keyword?`、`startTime?`、`endTime?`、`pageNum=1`、`pageSize=20` |
-| GET | `/system/logs/sources` | 系统日志来源下拉选项 | 查询：`taskId?` |
+| GET | `/system/logs/findData` | 日志级别与来源枚举选项 | 无 |
 | GET | `/system/logs/{id}` | 系统日志详情 | 路径：`id` |
 
-查询参数 `logLevel` 使用枚举编码：`DEBUG` 调试、`INFO` 信息、`WARN` 警告、`ERROR` 错误。日志列表和详情同时返回 `logLevel` 编码与 `logLevelName` 中文名称，前端可直接展示中文名称。`logSource` 精确匹配来源，`operatorId` 模糊匹配操作人，`keyword` 模糊匹配日志内容和详情；时间范围使用 ISO 8601 格式并包含起止时间。
+查询参数 `logLevel` 使用枚举编码：`INFO` 信息、`WARN` 警告、`ERROR` 错误。日志列表和详情同时返回 `logLevel` 编码与 `logLevelName` 中文名称，前端可直接展示中文名称。`logSource` 使用 `/system/logs/findData` 返回的选项英文 `value` 精确匹配来源，不接受中文名称，`operatorId` 模糊匹配操作人，`keyword` 模糊匹配日志内容和详情；时间范围使用 ISO 8601 格式并包含起止时间。
 
-系统日志页面只开放查询接口。日志新增由后台模块通过 `SystemLogService.createLog` 写入，不开放页面新增、修改或删除接口。
+`/system/logs/findData` 同时返回 `logLevel` 和 `logSource`。来源统一由 `SystemLogSource` 枚举维护，人工操作引用同一个来源枚举，`value` 为英文编码、`label` 为中文名称；与任务无关，即使尚无日志也返回完整来源选项。日志表 `log_source` 保存英文编码，列表和详情返回 `logSource` 编码和 `logSourceName` 中文名称；旧数据不迁移。
+
+系统日志页面只开放查询接口。日志新增由后台模块通过 `OperationLogService` 写入，不开放页面新增、修改或删除接口。
 
 ## 12. 调试建议
+
+### 采集传输协议编号升级
+
+`transferProtocol` 统一使用 `1 JSON、2 PDXP、3 FEP`。管理服务的传输协议枚举不再返回 Protobuf，创建、修改采集接口不再接受值 `4`；数据处理服务的 FEP 接收分支和模拟源管理服务都使用值 `3`。模拟源仅支持 `2 PDXP、3 FEP`。协议配置的 `protocolType` 是独立字段，保持原有定义。
+
+已有环境先停止相关采集与模拟源任务，再执行下面的升级语句，最后重启管理、数据处理及模拟源管理服务。新环境直接使用已更新的建表脚本。以下只把旧 FEP 值 `4` 改为 `3`；旧值 `3` 原来表示 Protobuf，若已有这类采集接口，需根据实际用途重新选择有效协议，不能直接当作 FEP 使用。
+
+采集接口表升级：
+
+```sql
+BEGIN;
+-- 将已有FEP采集接口的传输协议编号统一为3，包括逻辑删除的配置。
+UPDATE collect_interface_config
+SET transfer_protocol = 3
+WHERE transfer_protocol = 4;
+-- 同步字段描述。
+COMMENT ON COLUMN collect_interface_config.transfer_protocol IS '传输协议：1JSON 2PDXP 3FEP';
+COMMIT;
+```
+
+已安装模拟源管理模块的环境还需执行以下语句。约束名称对应原 `sql/data-simulator-service.sql` 创建的表；未安装该模块时无需执行此段。
+
+```sql
+BEGIN;
+-- 先移除旧编号约束，允许将4更新为3。
+ALTER TABLE simulator_source_config
+    DROP CONSTRAINT IF EXISTS simulator_source_config_transfer_protocol_check;
+ALTER TABLE simulator_source_config
+    DROP CONSTRAINT IF EXISTS simulator_source_config_check;
+-- 更新已有FEP模拟源配置。
+UPDATE simulator_source_config
+SET transfer_protocol = 3
+WHERE transfer_protocol = 4;
+-- 恢复协议编号及协议与传输方式的约束。
+ALTER TABLE simulator_source_config
+    ADD CONSTRAINT simulator_source_config_transfer_protocol_check
+    CHECK (transfer_protocol IN (2, 3));
+ALTER TABLE simulator_source_config
+    ADD CONSTRAINT simulator_source_config_check
+    CHECK ((transfer_protocol = 2 AND transfer_type = 1)
+        OR (transfer_protocol = 3 AND transfer_type = 2));
+-- 同步字段描述。
+COMMENT ON COLUMN simulator_source_config.transfer_protocol IS '传输协议：2为PDXP，3为FEP';
+COMMIT;
+```
 
 Apifox、Postman 或其他支持 OpenAPI 3.0 的工具可直接导入同目录下的 `apifox-openapi.yaml`。登录后，将返回的 Token 配置为 Bearer Token 即可调用其他接口。
 
 OpenAPI 文件已为各模块请求 DTO 配置独立 Schema，包括字段类型、枚举、说明和示例值；导入 Apifox 后可直接生成请求参数表与 JSON 示例。
 
 设备卫星表和参数解析配置表的建表定义统一维护在 `sql/business_schema.sql` 中。
+
+告警与人工操作日志的触发范围、合并规则、遥测筛选详情及发布步骤见 [告警与操作日志说明](告警与操作日志说明.md)。已有数据库发布前执行 `sql/upgrade_alarm_operation_log.sql`，不迁移旧表数据。

@@ -1,6 +1,7 @@
 package com.example.dataadmin.entity;
 
 import com.example.dataadmin.enums.SystemLogLevel;
+import com.example.dataadmin.enums.SystemLogSource;
 
 import java.time.LocalDateTime;
 
@@ -16,9 +17,9 @@ public class SysRuntimeLog {
     private String taskId;
     /** 时间。 */
     private LocalDateTime logTime;
-    /** 日志级别：DEBUG调试 INFO信息 WARN警告 ERROR错误。 */
+    /** 日志级别：INFO信息 WARN警告 ERROR错误。 */
     private String logLevel;
-    /** 来源。 */
+    /** 来源英文编码。 */
     private String logSource;
     /** 操作人ID。 */
     private String operatorId;
@@ -70,6 +71,11 @@ public class SysRuntimeLog {
 
     public void setLogSource(String logSource) {
         this.logSource = logSource;
+    }
+
+    /** 返回来源枚举的中文名称，供列表、详情和操作快照展示。 */
+    public String getLogSourceName() {
+        return SystemLogSource.labelOf(logSource);
     }
 
     public String getOperatorId() {

@@ -14,6 +14,8 @@ import java.util.List;
  * <p>所有 SQL 统一维护在 CollectInterfaceConfigMapper.xml 中。</p>
  */
 public interface CollectInterfaceConfigMapper {
+    /** 查询全量未删除采集接口及其启用数量。 */
+    com.example.dataadmin.vo.collection.CollectionOverviewVO findNodeCounts();
 
     /** 查询当前最大任务下启用且未删除的采集接口主键。 */
     List<Long> findAllEnabledIds();
@@ -27,6 +29,11 @@ public interface CollectInterfaceConfigMapper {
     /** 按筛选条件分页查询采集接口。 */
     List<CollectInterfaceConfig> findPage(InterfaceQueryRequest request);
 
+    /** 分页完成后，只汇总当前页接口的历史采集量，包含已归档窗口。 */
+    List<CollectInterfaceConfig> findCollectionCounts(
+            @Param("taskId") String taskId,
+            @Param("interfaceIds") List<Long> interfaceIds);
+
     /** 统计符合筛选条件的采集接口数量。 */
     long count(InterfaceQueryRequest request);
 
@@ -35,6 +42,10 @@ public interface CollectInterfaceConfigMapper {
 
     /** 按主键查询采集接口。 */
     CollectInterfaceConfig findById(@Param("id") Long id);
+
+    /** 查询协议配置绑定的全部未删除采集接口名称，不区分启用状态。 */
+    List<String> findActiveNamesByProtocolConfigId(
+            @Param("protocolConfigId") Long protocolConfigId);
 
     /** 统计相同监听配置的已启用接口数量。 */
     long countEnabledEndpointConflicts(

@@ -90,13 +90,19 @@
           and is_deleted = 0
     </update>
 
-    <!-- 逻辑删除协议配置。 -->
+    <!-- 仅当不存在未删除采集接口绑定时逻辑删除协议，避免单靠前置查询。 -->
     <update id="delete">
         update collect_protocol_config
         set is_deleted = 1,
             update_time = current_timestamp
         where id = #{id}
           and is_deleted = 0
+          and not exists (
+              select 1
+              from collect_interface_config interface_config
+              where interface_config.protocol_config_id = #{id}
+                and interface_config.is_deleted = 0
+          )
     </update>
 
     <!-- 更新协议配置启用状态。 -->

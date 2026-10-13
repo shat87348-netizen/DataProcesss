@@ -2,6 +2,7 @@ package com.example.dataadmin.enums;
 
 import com.example.dataadmin.vo.EnumOptionVO;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -51,7 +52,6 @@ public final class ControllerEnumData {
     public static Map<String, List<EnumOptionVO>> processing() {
         Map<String, List<EnumOptionVO>> data = EnumData.create();
         EnumData.add(data, "taskStatus", BusinessEnums.ProcessTaskStatus.values());
-        EnumData.add(data, "logLevel", DataProcessLogLevel.values());
         EnumData.add(data, "ruleEnabled", BusinessEnums.Enabled.values());
         EnumData.add(data, "storeFlag", BusinessEnums.YesNo.values());
         EnumData.add(data, "alarmFlag", BusinessEnums.YesNo.values());
@@ -70,7 +70,6 @@ public final class ControllerEnumData {
     /** 返回校准管理模块枚举。 */
     public static Map<String, List<EnumOptionVO>> calibration() {
         Map<String, List<EnumOptionVO>> data = EnumData.create();
-        EnumData.add(data, "channelType", BusinessEnums.ChannelType.values());
         EnumData.add(data, "detectMethod", BusinessEnums.DetectMethod.values());
         EnumData.add(data, "dynamicUpdate", BusinessEnums.YesNo.values());
         EnumData.add(data, "autoClean", BusinessEnums.YesNo.values());
@@ -83,10 +82,27 @@ public final class ControllerEnumData {
     /** 返回告警管理模块枚举。 */
     public static Map<String, List<EnumOptionVO>> alarm() {
         Map<String, List<EnumOptionVO>> data = EnumData.create();
+        // 来源和事件类型来自公共枚举，管理服务和处理服务保持一致。
+        List<EnumOptionVO> sources = new ArrayList<EnumOptionVO>();
+        for (com.example.common.enums.DataAlarmSource source : com.example.common.enums.DataAlarmSource.values()) {
+            sources.add(new EnumOptionVO(source.getValue(), source.getLabel()));
+        }
+        data.put("dataAlarmSource", sources);
+        List<EnumOptionVO> types = new java.util.ArrayList<EnumOptionVO>();
+        for (com.example.common.enums.DataAlarmType type : com.example.common.enums.DataAlarmType.values()) {
+            types.add(new EnumOptionVO(type.name(), type.getLabel()));
+        }
+        data.put("dataAlarmEventType", types);
         EnumData.add(data, "dataAlarmLevel", BusinessEnums.DataAlarmLevel.values());
         EnumData.add(data, "dataAlarmStatus", BusinessEnums.DataAlarmStatus.values());
         EnumData.add(data, "systemAlarmLevel", BusinessEnums.SystemAlarmLevel.values());
         EnumData.add(data, "systemAlarmStatus", BusinessEnums.SystemAlarmStatus.values());
+        // 系统告警类型与监测指标复用同一编码定义，不重复创建类型枚举。
+        EnumData.add(data, "systemAlarmType", SystemMonitorMetric.values());
+        EnumData.add(data, "serviceStatus", SystemMonitorServiceStatus.values());
+        EnumData.add(data, "metricCode", SystemMonitorMetric.values());
+        EnumData.add(data, "heartbeatStatus", SystemHeartbeatStatus.values());
+        EnumData.add(data, "changeType", SystemHealthAlarmChangeType.values());
         return data;
     }
 
@@ -118,6 +134,8 @@ public final class ControllerEnumData {
     public static Map<String, List<EnumOptionVO>> systemLog() {
         Map<String, List<EnumOptionVO>> data = EnumData.create();
         EnumData.add(data, "logLevel", SystemLogLevel.values());
+        // 人工操作和枚举选项引用同一个来源枚举，数据库编码与展示名称分开维护。
+        EnumData.add(data, "logSource", SystemLogSource.values());
         return data;
     }
 }

@@ -1,16 +1,16 @@
 package com.example.dataadmin.service.impl;
 
+import com.example.common.enums.DataAlarmSource;
 import com.example.common.response.PageResult;
 import com.example.dataadmin.entity.DmAlarmEvent;
 import com.example.dataadmin.entity.SysAlarmEvent;
-import com.example.dataadmin.entity.SysHealthAlarmEvent;
 import com.example.dataadmin.entity.SysMonitorSnapshot;
 import com.example.dataadmin.enums.SystemHealthAlarmChangeType;
 import com.example.dataadmin.mapper.DmAlarmEventMapper;
 import com.example.dataadmin.mapper.SysAlarmEventMapper;
-import com.example.dataadmin.mapper.SysHealthAlarmEventMapper;
 import com.example.dataadmin.mapper.SysMonitorSnapshotMapper;
 import com.example.dataadmin.service.AlarmManagementService;
+import com.example.dataadmin.service.support.SystemResourceMetrics;
 import com.example.dataadmin.service.RocketMqMonitorService;
 import com.example.dataadmin.vo.alarm.SystemHealthAlarmChangeVO;
 import com.example.dataadmin.vo.alarm.SystemMonitorPushVO;
@@ -44,11 +44,30 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
     private final SysAlarmEventMapper systemAlarmMapper;
     private final DmAlarmEventMapper dataAlarmMapper;
     private final SysMonitorSnapshotMapper snapshotMapper;
-    private final SysHealthAlarmEventMapper healthAlarmMapper;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final SimpMessagingTemplate messagingTemplate;
     private final RocketMqMonitorService rocketMqMonitorService;
+    /** 系统告警和处理页面共用的机器资源采集组件。 */
+    @org.springframework.beans.factory.annotation.Autowired
+    private SystemResourceMetrics systemResourceMetrics;
+
+    /** 实时查询采集接口总数与已启用数量。 */
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.example.dataadmin.mapper.CollectInterfaceConfigMapper interfaceMapper;
+    /** 通过注册中心读取处理服务健康实例。 */
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.cloud.client.discovery.DiscoveryClient discoveryClient;
+
+    /** 查询注册中心实际服务状态，查询失败与无实例分开表示。 */
+    private String readServiceStatus() {
+        try {
+            return discoveryClient.getInstances("data-process-service").isEmpty()
+                    ? "DOWN" : "RUNNING";
+        } catch (Exception exception) {
+            return "ERROR";
+        }
+    }
 
     /** 每 30 秒批量持久化一次，最多暂存 6 个快照。 */
     private final List<SysMonitorSnapshot> pendingSnapshots =
@@ -78,11 +97,14 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
     @Value("${system-monitor.queue-warning-depth}")
     private long queueThreshold;
 
+    /** 处理服务心跳正常判断时限，单位毫秒。 */
+    @Value("${system-monitor.process-heartbeat-timeout-millis:15000}")
+    private long heartbeatTimeoutMillis;
+
     public AlarmManagementServiceImpl(
             SysAlarmEventMapper systemAlarmMapper,
             DmAlarmEventMapper dataAlarmMapper,
             SysMonitorSnapshotMapper snapshotMapper,
-            SysHealthAlarmEventMapper healthAlarmMapper,
             StringRedisTemplate redisTemplate,
             ObjectMapper objectMapper,
             SimpMessagingTemplate messagingTemplate,
@@ -90,7 +112,6 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
         this.systemAlarmMapper = systemAlarmMapper;
         this.dataAlarmMapper = dataAlarmMapper;
         this.snapshotMapper = snapshotMapper;
-        this.healthAlarmMapper = healthAlarmMapper;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.messagingTemplate = messagingTemplate;
@@ -120,8 +141,12 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
         SystemMonitorPushVO pushMessage = new SystemMonitorPushVO();
         pushMessage.setSnapshot(snapshot);
         pushMessage.setAlarmEvents(alarmEvents);
-        messagingTemplate.convertAndSend(
-                "/topic/system-monitor", pushMessage);
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                new org.springframework.transaction.support.TransactionSynchronization() {
+                    @Override public void afterCommit() {
+                        messagingTemplate.convertAndSend("/topic/system-monitor", pushMessage);
+                    }
+                });
     }
 
     /** 每 30 秒通过 MyBatis 写入暂存的系统状态快照。 */
@@ -133,6 +158,15 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
             snapshots = new ArrayList<SysMonitorSnapshot>(pendingSnapshots);
             pendingSnapshots.clear();
         }
+        // 数据库批次回滚时恢复快照，保证临时写库失败不会丢失已采样数据。
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                new org.springframework.transaction.support.TransactionSynchronization() {
+                    @Override public void afterCompletion(int status) {
+                        if (status != STATUS_COMMITTED) {
+                            synchronized (pendingSnapshots) { pendingSnapshots.addAll(0, snapshots); }
+                        }
+                    }
+                });
         for (SysMonitorSnapshot snapshot : snapshots) {
             snapshotMapper.insert(snapshot);
         }
@@ -147,15 +181,7 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
 
     @Override
     public SysMonitorSnapshot getSystemMonitorCurrent() {
-        try {
-            String cached = redisTemplate.opsForValue().get(
-                    CURRENT_KEY);
-            if (cached != null) {
-                return objectMapper.readValue(cached, SysMonitorSnapshot.class);
-            }
-        } catch (Exception ignored) {
-            // Redis 不可用时即时采集，保证页面仍可展示。
-        }
+        // 页面主动查询时即时采集，避免缓存掩盖接口开关和服务状态变化。
         return buildSnapshot();
     }
 
@@ -166,12 +192,6 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
         int safeMinutes = Math.max(1, Math.min(minutes, maximum));
         return snapshotMapper.findHistory(
                 LocalDateTime.now().minusMinutes(safeMinutes));
-    }
-
-    @Override
-    public List<SysHealthAlarmEvent> getSystemHealthAlarms(
-            Integer status) {
-        return healthAlarmMapper.findAll(status);
     }
 
     /**
@@ -188,17 +208,17 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
         SysMonitorSnapshot snapshot = new SysMonitorSnapshot();
         snapshot.setSampleTime(now);
 
-        // 当前定时采集任务能够执行时，先将管理服务自身标记为运行中。
-        // 后续接入多处理节点后，应根据各节点上报的心跳汇总实际服务状态。
-        snapshot.setServiceStatus("RUNNING");
+        // 按处理服务在注册中心的健康实例判断真实可用状态。
+        snapshot.setServiceStatus(readServiceStatus());
 
         // 这里统计的是 data-admin-service 当前 JVM 的运行时长，单位为秒。
         snapshot.setUptimeSeconds(
                 ManagementFactory.getRuntimeMXBean().getUptime() / 1000L);
 
-        // 当前按单节点部署处理；多节点版本应从 Redis 心跳或 Nacos 实例列表动态统计。
-        snapshot.setOnlineNodeCount(1);
-        snapshot.setTotalNodeCount(1);
+        // 节点卡片按采集接口统计，在线表示已启用，不代表网络连接在线。
+        com.example.dataadmin.vo.collection.CollectionOverviewVO counts = interfaceMapper.findNodeCounts();
+        snapshot.setOnlineNodeCount(counts.getOnlineTotal().intValue());
+        snapshot.setTotalNodeCount(counts.getInterfaceTotal().intValue());
         snapshot.setDatabaseLatencyMs(readDatabaseLatency());
         snapshot.setMessageQueueDepth(readQueueDepth());
         snapshot.setLastHeartbeatTime(heartbeatMillis == null
@@ -267,12 +287,12 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
             breachCounts.remove(breachKey);
 
             // 没有活动告警时不执行无意义的更新，也不会向前端发送重复恢复消息。
-            SysHealthAlarmEvent open = healthAlarmMapper.findOpen(
+            SysAlarmEvent open = systemAlarmMapper.findOpen(
                     metricCode);
             if (open == null) {
                 return null;
             }
-            healthAlarmMapper.recoverById(
+            systemAlarmMapper.recoverById(
                     open.getId(), snapshot.getSampleTime());
             open.setAlarmStatus(1);
             open.setRecoverTime(snapshot.getSampleTime());
@@ -288,11 +308,14 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
             return null;
         }
 
-        SysHealthAlarmEvent open = healthAlarmMapper.findOpen(
+        SysAlarmEvent open = systemAlarmMapper.findOpen(
                 metricCode);
         if (open != null) {
-            healthAlarmMapper.updateActive(
-                    open.getId(), actualValue, snapshot.getSampleTime());
+            int level = actualValue > threshold * 1.1 ? 3 : 2;
+            String content = metricName + "为" + format(actualValue) + "，持续超过阈值" + format(threshold);
+            systemAlarmMapper.updateActive(open.getId(), actualValue, snapshot.getSampleTime(), level, content);
+            open.setAlarmLevel(level);
+            open.setAlarmContent(content);
             open.setCurrentValue(actualValue);
             open.setLastAlarmTime(snapshot.getSampleTime());
             open.setUpdateTime(snapshot.getSampleTime());
@@ -302,9 +325,11 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
                     SystemHealthAlarmChangeType.UPDATED, open);
         }
 
-        SysHealthAlarmEvent event = new SysHealthAlarmEvent();
+        SysAlarmEvent event = new SysAlarmEvent();
         event.setAlarmTime(snapshot.getSampleTime());
-        event.setTargetName(targetName);
+        event.setObjName(targetName);
+        // 告警类型复用已有监测指标编码，中文类型名称由查询实体从枚举生成。
+        event.setAlarmType(metricCode);
         event.setMetricCode(metricCode);
         event.setAlarmLevel(actualValue > threshold * 1.1 ? 3 : 2);
         event.setAlarmContent(metricName + "为" + format(actualValue)
@@ -315,7 +340,7 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
         event.setLastAlarmTime(snapshot.getSampleTime());
         event.setAlarmStatus(0);
         event.setTriggerCount(1);
-        healthAlarmMapper.insert(event);
+        systemAlarmMapper.insert(event);
         return buildAlarmChange(SystemHealthAlarmChangeType.CREATED, event);
     }
 
@@ -331,7 +356,7 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
     /** 组装一条前端可直接处理的告警变化消息。 */
     private SystemHealthAlarmChangeVO buildAlarmChange(
             SystemHealthAlarmChangeType changeType,
-            SysHealthAlarmEvent alarmEvent) {
+            SysAlarmEvent alarmEvent) {
         SystemHealthAlarmChangeVO change = new SystemHealthAlarmChangeVO();
         change.setChangeType(changeType);
         change.setAlarmEvent(alarmEvent);
@@ -363,24 +388,16 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
         }
     }
 
+    /** CPU与内存统一委托共用组件采集，保证处理页面和系统告警口径一致。 */
     private double readCpuUsage() {
-        java.lang.management.OperatingSystemMXBean bean =
-                ManagementFactory.getOperatingSystemMXBean();
-        if (!(bean instanceof com.sun.management.OperatingSystemMXBean)) {
-            return 0;
-        }
-        double value = ((com.sun.management.OperatingSystemMXBean) bean)
-                .getSystemCpuLoad();
-        return round(Math.max(0, value * 100));
+        // 读取管理服务所在机器整体CPU使用率。
+        return systemResourceMetrics.readCpuUsage();
     }
 
+    /** 读取管理服务所在机器的物理内存使用率。 */
     private double readMemoryUsage() {
-        com.sun.management.OperatingSystemMXBean bean =
-                (com.sun.management.OperatingSystemMXBean)
-                        ManagementFactory.getOperatingSystemMXBean();
-        long total = bean.getTotalPhysicalMemorySize();
-        return total <= 0 ? 0 : round(
-                (total - bean.getFreePhysicalMemorySize()) * 100.0 / total);
+        // 与处理页面复用同一物理内存计算逻辑。
+        return systemResourceMetrics.readMemoryUsage();
     }
 
     private double readDiskUsage() {
@@ -390,9 +407,11 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
                 (total - disk.getUsableSpace()) * 100.0 / total);
     }
 
+    /** 根据最后上报时间判断处理服务心跳是否正常。 */
     private boolean isHeartbeatNormal(Long heartbeatMillis) {
+        // 按配置时限判断最后一次成功上报是否仍有效。
         return heartbeatMillis != null
-                && heartbeatMillis >= System.currentTimeMillis() - 15000L;
+                && heartbeatMillis >= System.currentTimeMillis() - heartbeatTimeoutMillis;
     }
 
     private int calculateHealthScore(double cpu, double memory, double disk) {
@@ -413,44 +432,18 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
     }
 
     @Override
-    public List<SysAlarmEvent> listSystemAlarms() {
-        return systemAlarmMapper.findAll();
-    }
-
-    @Override
-    public SysAlarmEvent getSystemAlarm(Long id) {
-        return systemAlarmMapper.findById(id);
-    }
-
-    @Override
-    @Transactional
-    public Long createSystemAlarm(SysAlarmEvent alarm) {
-        systemAlarmMapper.insert(alarm);
-        return alarm.getId();
-    }
-
-    @Override
-    @Transactional
-    public boolean updateSystemAlarm(SysAlarmEvent alarm) {
-        return systemAlarmMapper.update(alarm) > 0;
-    }
-
-    @Override
-    @Transactional
-    public boolean deleteSystemAlarm(Long id) {
-        return systemAlarmMapper.delete(id) > 0;
-    }
-
-    @Override
-    @Transactional
-    public boolean updateSystemAlarmStatus(Long id, Integer alarmStatus) {
-        return systemAlarmMapper.updateStatus(id, alarmStatus) > 0;
+    public List<SysAlarmEvent> listSystemAlarms(Integer status) {
+        // 只允许查询既有恢复状态，禁止无效编码静默返回空列表。
+        if (status != null && status != 0 && status != 1) {
+            throw new IllegalArgumentException("系统告警状态只能为0或1");
+        }
+        return systemAlarmMapper.findAll(status);
     }
 
     @Override
     public PageResult<DmAlarmEvent> pageDataAlarms(
             String taskId,
-            String sourceName,
+            String sourceCode,
             String keyword,
             Integer alarmLevel,
             Integer alarmStatus,
@@ -460,6 +453,10 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
             Integer pageSize) {
         validateDataAlarmQuery(
                 taskId, alarmLevel, alarmStatus, startTime, endTime);
+        // 来源参数必须是枚举编码，中文关键字匹配来源名称后再以编码查询。
+        String normalizedSource = DataAlarmSource.normalize(sourceCode);
+        String normalizedKeyword = trimToNull(keyword);
+        List<String> sourceKeywordValues = DataAlarmSource.matchingValues(normalizedKeyword);
         int safePageNum = pageNum == null ? 1 : Math.max(1, pageNum);
         int safePageSize = pageSize == null ? 20
                 : Math.min(100, Math.max(1, pageSize));
@@ -468,8 +465,9 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
         PageHelper.startPage(safePageNum, safePageSize);
         List<DmAlarmEvent> records = dataAlarmMapper.findAll(
                 taskId,
-                trimToNull(sourceName),
-                trimToNull(keyword),
+                normalizedSource,
+                normalizedKeyword,
+                sourceKeywordValues,
                 alarmLevel,
                 alarmStatus,
                 startTime,
@@ -484,35 +482,8 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
     }
 
     @Override
-    public List<String> listDataAlarmSources(String taskId) {
-        if (taskId != null && taskId.trim().isEmpty()) {
-            throw new IllegalArgumentException("试验任务编号不能为空");
-        }
-        return dataAlarmMapper.findSourceNames(taskId);
-    }
-
-    @Override
     public DmAlarmEvent getDataAlarm(Long id) {
         return dataAlarmMapper.findById(id);
-    }
-
-    @Override
-    @Transactional
-    public Long createDataAlarm(DmAlarmEvent alarm) {
-        dataAlarmMapper.insert(alarm);
-        return alarm.getId();
-    }
-
-    @Override
-    @Transactional
-    public boolean updateDataAlarm(DmAlarmEvent alarm) {
-        return dataAlarmMapper.update(alarm) > 0;
-    }
-
-    @Override
-    @Transactional
-    public boolean deleteDataAlarm(Long id) {
-        return dataAlarmMapper.delete(id) > 0;
     }
 
     @Override
@@ -531,8 +502,8 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
         if (taskId != null && taskId.trim().isEmpty()) {
             throw new IllegalArgumentException("试验任务编号不能为空");
         }
-        if (alarmLevel != null && (alarmLevel < 1 || alarmLevel > 5)) {
-            throw new IllegalArgumentException("告警级别只能为1至5");
+        if (alarmLevel != null && alarmLevel != 2 && alarmLevel != 4) {
+            throw new IllegalArgumentException("数据告警级别只能为2（一般）或4（严重）");
         }
         if (alarmStatus != null && alarmStatus != 0 && alarmStatus != 1) {
             throw new IllegalArgumentException("告警状态只能为0或1");

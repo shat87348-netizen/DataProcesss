@@ -3,7 +3,7 @@
 CREATE TABLE IF NOT EXISTS simulator_source_config (
     id BIGSERIAL PRIMARY KEY,
     source_name VARCHAR(100) NOT NULL,
-    transfer_protocol SMALLINT NOT NULL CHECK (transfer_protocol IN (2,4)),
+    transfer_protocol SMALLINT NOT NULL CHECK (transfer_protocol IN (2,3)),
     transfer_type SMALLINT NOT NULL,
     file_path VARCHAR(1000) NOT NULL,
     target_host VARCHAR(100) NOT NULL,
@@ -14,12 +14,12 @@ CREATE TABLE IF NOT EXISTS simulator_source_config (
     is_deleted SMALLINT NOT NULL DEFAULT 0,
     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CHECK ((transfer_protocol = 2 AND transfer_type = 1) OR (transfer_protocol = 4 AND transfer_type = 2))
+    CHECK ((transfer_protocol = 2 AND transfer_type = 1) OR (transfer_protocol = 3 AND transfer_type = 2))
 );
 COMMENT ON TABLE simulator_source_config IS '模拟源配置';
 COMMENT ON COLUMN simulator_source_config.id IS '主键';
 COMMENT ON COLUMN simulator_source_config.source_name IS '模拟源名称';
-COMMENT ON COLUMN simulator_source_config.transfer_protocol IS '传输协议：2为PDXP，4为FEP';
+COMMENT ON COLUMN simulator_source_config.transfer_protocol IS '传输协议：2为PDXP，3为FEP';
 COMMENT ON COLUMN simulator_source_config.transfer_type IS '传输方式：1为UDP，2为TCP';
 COMMENT ON COLUMN simulator_source_config.file_path IS '服务器文件路径';
 COMMENT ON COLUMN simulator_source_config.target_host IS '目标地址';

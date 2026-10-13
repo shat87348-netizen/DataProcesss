@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.dataadmin.mapper.VisualizationConfigMapper">
+    <!-- 只允许已接收调度任务范围内的配置导入导出。 -->
+    <select id="findTask" resultType="string">
+        select task_id from experiment_task
+        <where>
+            <choose>
+                <when test="taskId != null and taskId != ''">task_id = #{taskId}</when>
+                <otherwise>1 = 0</otherwise>
+            </choose>
+        </where>
+    </select>
+    <!-- 调用方必须提供任务和用户；缺失范围时不返回任何用户的数据。 -->
+    <sql id="pageScope">
+        <choose>
+            <when test="taskId != null and taskId != '' and userId != null">
+                and widget.task_id = #{taskId} and widget.user_id = #{userId}
+            </when>
+            <otherwise>and 1 = 0</otherwise>
+        </choose>
+    </sql>
+
+    <!-- 左连接保留失效勾选，交给业务层明确报错，避免导出时静默漏项。 -->
+    <select id="findSelectedParameters" resultType="com.example.dataadmin.entity.VisualizationParameterRecord">
+        select widget.id as widget_id, rule_config.id as parse_rule_id,
+               device.id as device_satellite_id, device.type as device_type,
+               device.code as device_code, device.name as device_name,
+               selection.telemetry_code, rule_config.telemetry_name,
+               rule_config.system_name as system_path
+        from monitor_dashboard_widget widget
+        inner join processed_telemetry_filter_selection selection
+          on selection.task_id = widget.task_id and selection.target_id = widget.id
+         and selection.selection_type = case when widget.widget_type = 1 then 4 else 3 end
+         and selection.is_deleted = 0
+        left join device_satellite device
+          on device.id = selection.device_satellite_id and device.task_id = widget.task_id
+         and device.is_deleted = 0
+        left join telemetry_parse_rule_config rule_config
+          on rule_config.task_id = widget.task_id
+         and rule_config.device_satellite_id = device.id
+         and rule_config.telemetry_code = selection.telemetry_code and rule_config.is_deleted = 0
+        where widget.widget_type in (1, 2)
+        <include refid="pageScope"/>
+        order by widget.id, device.type, device.code, selection.telemetry_code
+    </select>
+
+    <!-- 数据项查询不读取接口连接参数或协议配置正文，只导出可重新匹配的名称。 -->
+    <select id="findItems" resultType="com.example.dataadmin.entity.VisualizationItemRecord">
+        select item.widget_id, item.parse_rule_id, item.interface_id, item.protocol_config_id,
+               item.item_code, item.item_name, (item.is_selected = 1) as selected,
+               interface_config.interface_name, protocol_config.config_name as protocol_config_name
+        from monitor_dashboard_widget widget
+        inner join monitor_widget_config_item item on item.widget_id = widget.id
+        left join collect_interface_config interface_config
+          on interface_config.id = item.interface_id and interface_config.task_id = widget.task_id
+         and interface_config.is_deleted = 0
+        left join collect_protocol_config protocol_config
+          on protocol_config.id = item.protocol_config_id and protocol_config.task_id = widget.task_id
+         and protocol_config.is_deleted = 0
+        where 1 = 1
+        <include refid="pageScope"/>
+        order by widget.id, item.id
+    </select>
+
+    <!-- 每批只匹配文件实际引用的参数，不扫描加载目标任务的完整参数表。 -->
+    <select id="findParameterMatches" resultType="com.example.dataadmin.entity.VisualizationParameterRecord">
+        select rule_config.id as parse_rule_id, device.id as device_satellite_id,
+               device.type as device_type, device.code as device_code, device.name as device_name,
+               rule_config.telemetry_code, rule_config.telemetry_name, rule_config.system_name as system_path
+        from telemetry_parse_rule_config rule_config
+        inner join device_satellite device
+          on device.id = rule_config.device_satellite_id and device.task_id = rule_config.task_id
+         and device.is_deleted = 0
+        where rule_config.is_deleted = 0
+        <choose>
+            <when test="taskId != null and taskId != '' and parameters != null and parameters.size() > 0">
+                and rule_config.task_id = #{taskId}
+                and
+                <foreach collection="parameters" item="parameter" open="(" separator="or" close=")">
+                    (device.type = #{parameter.deviceType} and device.code = #{parameter.deviceCode}
+                     and rule_config.telemetry_code = #{parameter.telemetryCode})
+                </foreach>
+            </when>
+            <otherwise>and 1 = 0</otherwise>
+        </choose>
+    </select>
+
+    <!-- 名称引用只查询有效配置，空任务或空名称列表不得扩大查询范围。 -->
+    <sql id="associationScope">
+        <choose>
+            <when test="taskId != null and taskId != '' and names != null and names.size() > 0">
+                and task_id = #{taskId}
+            </when>
+            <otherwise>and 1 = 0</otherwise>
+        </choose>
+    </sql>
+
+    <!-- 导入持有共享行锁，采集接口的修改和逻辑删除等待本次事务结束。 -->
+    <select id="findInterfaceMatches" resultType="com.example.dataadmin.entity.CollectInterfaceConfig">
+        select id, interface_name from collect_interface_config
+        where is_deleted = 0
+        <include refid="associationScope"/>
+        <if test="names != null and names.size() > 0">
+            and interface_name in
+            <foreach collection="names" item="name" open="(" separator="," close=")">#{name}</foreach>
+        </if>
+        order by id
+        <if test="lock">for share</if>
+    </select>
+
+    <!-- 只读取协议主键和名称，配置正文不进入导入导出内存和响应。 -->
+    <select id="findProtocolMatches" resultType="com.example.dataadmin.entity.CollectProtocolConfig">
+        select id, config_name from collect_protocol_config
+        where is_deleted = 0
+        <include refid="associationScope"/>
+        <if test="names != null and names.size() > 0">
+            and config_name in
+            <foreach collection="names" item="name" open="(" separator="," close=")">#{name}</foreach>
+        </if>
+        order by id
+        <if test="lock">for share</if>
+    </select>
+    <!-- 数据项使用数据库序列生成新主键，每批只写入已经完整校验的配置。 -->
+    <insert id="insertItems">
+        insert into monitor_widget_config_item
+            (id, widget_id, parse_rule_id, interface_id, protocol_config_id, item_code, item_name, is_selected)
+        values
+        <foreach collection="items" item="item" separator=",">
+            (nextval('monitor_widget_config_item_id_seq'), #{item.widgetId},
+             #{item.parseRuleId,jdbcType=BIGINT}, #{item.interfaceId,jdbcType=BIGINT},
+             #{item.protocolConfigId,jdbcType=BIGINT}, #{item.itemCode}, #{item.itemName}, #{item.isSelected})
+        </foreach>
+    </insert>
+
+    <!-- 组件主键刚生成且组件内参数已经去重，直接分批恢复独立场景勾选。 -->
+    <insert id="insertSelections">
+        insert into processed_telemetry_filter_selection
+            (task_id, device_satellite_id, telemetry_code, selection_type, target_id, is_deleted)
+        values
+        <foreach collection="parameters" item="parameter" separator=",">
+            (#{taskId}, #{parameter.deviceSatelliteId}, #{parameter.telemetryCode},
+             #{selectionType}, #{widgetId}, 0)
+        </foreach>
+    </insert>
+</mapper>

@@ -25,10 +25,9 @@ public class CollectInterfaceRuntimeController {
 
     /** 按Admin传入的完整接口主键列表同步UDP采集任务。 */
     @PostMapping("/sync")
-    public ApiResponse<Void> syncInterfaces(
+    public ApiResponse<java.util.List<Long>> syncInterfaces(
             @Valid @RequestBody CollectInterfaceSyncRequest request) {
         // Controller只负责接收通知，具体查询和启停统一交给接口管理组件。
-        interfaceManager.syncInterfaces(request.getInterfaceIds());
-        return ApiResponse.success();
+        return ApiResponse.success(interfaceManager.syncInterfaces(request.getInterfaceIds()));
     }
 }

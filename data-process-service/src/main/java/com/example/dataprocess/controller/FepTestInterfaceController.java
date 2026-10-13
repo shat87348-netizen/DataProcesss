@@ -24,7 +24,7 @@ public class FepTestInterfaceController {
     /** TCP传输方式的枚举值。 */
     private static final int TRANSFER_TYPE_TCP = 2;
     /** FEP传输协议的枚举值。 */
-    private static final int TRANSFER_PROTOCOL_FEP = 4;
+    private static final int TRANSFER_PROTOCOL_FEP = 3;
     /** FEP测试采集接口监听的本机地址。 */
     private static final String TEST_INTERFACE_HOST = "127.0.0.1";
     /** FEP UDP测试接口监听端口。 */

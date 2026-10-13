@@ -40,10 +40,10 @@ public class InterfaceSaveRequest {
     /** 传输方式：1 UDP，2 TCP，3 HTTP。 */
     private Integer transferType;
 
-    /** 传输协议：1 JSON，2 PDXP，3 Protobuf，4 FEP。 */
+    /** 传输协议：1 JSON，2 PDXP，3 FEP。 */
     @NotNull(message = "传输协议不能为空")
-    @Min(value = 1, message = "传输协议只能为1到4")
-    @Max(value = 4, message = "传输协议只能为1到4")
+    @Min(value = 1, message = "传输协议只能为1到3")
+    @Max(value = 3, message = "传输协议只能为1到3")
     private Integer transferProtocol;
 
     /** 关联协议配置 ID。 */
@@ -63,9 +63,6 @@ public class InterfaceSaveRequest {
     /** UDP组播地址；为空时按UDP单播接收。 */
     @Size(max = 100, message = "组播地址不能超过100个字符")
     private String multicastIp;
-
-    /** 接口运行状态：0 离线，1 在线。 */
-    private Integer status;
 
     /** 是否启用：0 否，1 是。 */
     private Integer enabled;
@@ -173,14 +170,6 @@ public class InterfaceSaveRequest {
 
     public void setMulticastIp(String multicastIp) {
         this.multicastIp = multicastIp;
-    }
-
-    public Integer getStatus() {
-        return status;
-    }
-
-    public void setStatus(Integer status) {
-        this.status = status;
     }
 
     public Integer getEnabled() {

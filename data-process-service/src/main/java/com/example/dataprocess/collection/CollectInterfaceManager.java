@@ -35,6 +35,16 @@ import java.util.concurrent.ThreadPoolExecutor;
 /** 根据数据库配置动态启动和停止采集接口。 */
 @Component
 public class CollectInterfaceManager implements DisposableBean {
+    /** 告警组件采用独立注入，复用已有离线构造入口。 */
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.example.dataprocess.service.DataAlarmRecorder alarmRecorder;
+
+    /** 提交异常上下文，采集线程不直接写数据库。 */
+    private void alarm(com.example.dataprocess.entity.CollectInterfaceRuntimeConfig config,
+            com.example.common.enums.DataAlarmType type, String detail) {
+        if (alarmRecorder != null) { alarmRecorder.record(config, type, detail); }
+    }
+
 
     /** 接口管理日志。 */
     private static final Logger LOGGER = LoggerFactory.getLogger(
@@ -102,9 +112,10 @@ public class CollectInterfaceManager implements DisposableBean {
         if (stopping) {
             return;
         }
+        List<CollectInterfaceRuntimeConfig> enabledConfigs = new ArrayList<CollectInterfaceRuntimeConfig>();
         try {
             // 第一步：从数据库读取全部启用且未删除的接口运行配置。
-            List<CollectInterfaceRuntimeConfig> enabledConfigs =
+            enabledConfigs =
                     runtimeMapper.findAllEnabledInterfaces();
             // 第二步：接口启动前按其共同任务加载一次有效校准通道配置。
             attachCalibrationConfigs(enabledConfigs);
@@ -113,6 +124,10 @@ public class CollectInterfaceManager implements DisposableBean {
             LOGGER.info("数据处理服务启动后采集接口恢复完成，启用接口数量：{}",
                     enabledConfigs.size());
         } catch (Exception exception) {
+            for (CollectInterfaceRuntimeConfig config : enabledConfigs) {
+                alarm(config, com.example.common.enums.DataAlarmType.INTERFACE_START,
+                        "启动配置加载失败，采集接口尚未恢复：" + exception.getMessage());
+            }
             // 数据库整体查询失败时保留服务进程，等待后续管理服务再次同步。
             LOGGER.error("数据处理服务启动后恢复采集接口失败，原因：{}",
                     exception.getMessage(), exception);
@@ -120,7 +135,7 @@ public class CollectInterfaceManager implements DisposableBean {
     }
 
     /** 按Admin通知的完整接口主键列表同步当前运行接口。 */
-    public synchronized void syncInterfaces(List<Long> interfaceIds) {
+    public synchronized List<Long> syncInterfaces(List<Long> interfaceIds) {
         if (stopping) {
             throw new IllegalStateException("数据处理服务正在停止，不能同步采集接口");
         }
@@ -136,6 +151,12 @@ public class CollectInterfaceManager implements DisposableBean {
         synchronizeRunningInterfaces(configs);
         LOGGER.info("采集接口同步完成，通知数量：{}，实际启用数量：{}",
                 normalizedIds.size(), configs.size());
+        List<Long> runningIds = new ArrayList<Long>();
+        for (Map.Entry<Long, RunningInterface> entry : runningInterfaces.entrySet()) {
+            if (!entry.getValue().future.isDone()) { runningIds.add(entry.getKey()); }
+        }
+        java.util.Collections.sort(runningIds);
+        return runningIds;
     }
 
     /** 查询一次共同任务的有效校准通道，并让本批接口共用同一个只读Map。 */
@@ -287,11 +308,20 @@ public class CollectInterfaceManager implements DisposableBean {
 
             // 第二步：这里是进入采集线程的切换点，由采集线程池调用receiver.run()。
             // submit立即返回Future任务句柄，Admin请求线程不会进入长期阻塞的网络接收循环。
+            if (receiver instanceof UdpInterfaceReceiver) {
+                ((UdpInterfaceReceiver) receiver).setAlarmRecorder(alarmRecorder);
+            } else if (receiver instanceof TcpInterfaceReceiver) {
+                ((TcpInterfaceReceiver) receiver).setAlarmRecorder(alarmRecorder);
+            }
             Future<?> future = collectExecutor.submit(receiver);
             // 第三步：保存接口配置、接收任务和Future，供配置变更和停止接口使用。
             runningInterfaces.put(
                     config.getInterfaceId(),
                     new RunningInterface(config, receiver, future));
+            if (alarmRecorder != null) {
+                alarmRecorder.recover(config, com.example.common.enums.DataAlarmType.INTERFACE_START, null, null);
+                alarmRecorder.recover(config, com.example.common.enums.DataAlarmType.INTERFACE_STOP, null, null);
+            }
             LOGGER.info("采集接口已启动，接口编号：{}，传输方式：{}，传输协议：{}，地址：{}，端口：{}，组播地址：{}",
                     config.getInterfaceId(), config.getTransferType(),
                     config.getTransferProtocol(), config.getHost(), config.getPort(),
@@ -299,11 +329,13 @@ public class CollectInterfaceManager implements DisposableBean {
         } catch (RejectedExecutionException exception) {
             // 接收任务未进入线程池时立即释放已经绑定的网络端口。
             stopCreatedReceiver(receiver);
+            alarm(config, com.example.common.enums.DataAlarmType.INTERFACE_START, "采集线程池容量不足，接口未启动");
             LOGGER.error("采集线程池容量不足，接口编号：{}",
                     config.getInterfaceId(), exception);
         } catch (Exception exception) {
             // 启动中途失败时释放已经创建的接收器，避免端口残留占用。
             stopCreatedReceiver(receiver);
+            alarm(config, com.example.common.enums.DataAlarmType.INTERFACE_START, "接口启动失败：" + exception.getMessage());
             LOGGER.error("采集接口启动失败，接口编号：{}",
                     config.getInterfaceId(), exception);
         }

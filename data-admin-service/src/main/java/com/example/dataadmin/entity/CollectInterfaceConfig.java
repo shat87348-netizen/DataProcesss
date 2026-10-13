@@ -2,6 +2,7 @@ package com.example.dataadmin.entity;
 
 import com.example.dataadmin.enums.BusinessEnums;
 import com.example.dataadmin.enums.EnumData;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.time.LocalDateTime;
 
@@ -25,7 +26,7 @@ public class CollectInterfaceConfig {
     private String messageContent;
     /** 传输方式：1UDP 2TCP 3HTTP。 */
     private Integer transferType;
-    /** 传输协议：1 JSON，2 PDXP，3 Protobuf，4 FEP。 */
+    /** 传输协议：1 JSON，2 PDXP，3 FEP。 */
     private Integer transferProtocol;
     /** 协议配置ID。 */
     private Long protocolConfigId;
@@ -39,14 +40,14 @@ public class CollectInterfaceConfig {
     private Integer port;
     /** UDP组播地址，为空时按单播接收。 */
     private String multicastIp;
-    /** 状态：0离线 1在线。 */
-    private Integer status;
     /** 启用状态：0禁用 1启用。 */
     private Integer enabled;
     /** 是否启用RPC处理：0否 1是。 */
     private Integer rpcEnabled;
     /** 累计数据包数量。 */
     private Long dataPacketCount;
+    /** 分页列表返回的最新采集速率，单位KB/s，不参与配置入库。 */
+    private Double interfaceRateKbps;
     /** 接口备注。 */
     private String remark;
     /** 是否删除：0否 1是。 */
@@ -178,17 +179,14 @@ public class CollectInterfaceConfig {
         this.multicastIp = multicastIp;
     }
 
+    /** 启用开关是在线状态的唯一依据，不读取历史状态列。 */
     public Integer getStatus() {
-        return status;
+        return Integer.valueOf(1).equals(enabled) ? 1 : 0;
     }
 
-    public void setStatus(Integer status) {
-        this.status = status;
-    }
-
-    /** 返回接口运行状态中文名称。 */
+    /** 返回由启用开关决定的在线状态中文名称。 */
     public String getStatusName() {
-        return EnumData.labelOf(BusinessEnums.InterfaceStatus.values(), status);
+        return EnumData.labelOf(BusinessEnums.InterfaceStatus.values(), getStatus());
     }
 
     public Integer getEnabled() {
@@ -223,6 +221,17 @@ public class CollectInterfaceConfig {
 
     public void setDataPacketCount(Long dataPacketCount) {
         this.dataPacketCount = dataPacketCount;
+    }
+
+    /** 仅在分页列表加载实时指标后返回采集速率。 */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public Double getInterfaceRateKbps() {
+        return interfaceRateKbps;
+    }
+
+    /** 回填分页列表的实时采集速率。 */
+    public void setInterfaceRateKbps(Double interfaceRateKbps) {
+        this.interfaceRateKbps = interfaceRateKbps;
     }
 
     public String getRemark() {

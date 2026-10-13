@@ -2,7 +2,6 @@ package com.example.dataadmin.service.impl;
 
 import com.example.common.response.PageResult;
 import com.example.common.tool.IoTDBPathTool;
-import com.example.dataadmin.entity.DataProcessLog;
 import com.example.dataadmin.entity.TelemetryParseRuleConfig;
 import com.example.dataadmin.entity.ProcessedTelemetryFilterSelection;
 import com.example.dataadmin.entity.DeviceSatellite;
@@ -16,11 +15,10 @@ import com.example.dataadmin.mapper.DeviceSatelliteMapper;
 import com.example.dataadmin.mapper.IoTDBFrameQueryMapper;
 import com.example.dataadmin.enums.DeviceSatelliteType;
 import com.example.dataadmin.service.support.ParameterWorkbookParser;
+import com.example.dataadmin.service.support.SystemResourceMetrics;
 import com.example.dataadmin.vo.processing.DeviceSatelliteOptionVO;
 import com.example.dataadmin.entity.ProcessingRuleConfig;
 import com.example.dataadmin.entity.InvalidTelemetryFrame;
-import com.example.dataadmin.enums.DataProcessLogLevel;
-import com.example.dataadmin.mapper.DataProcessLogMapper;
 import com.example.dataadmin.mapper.DashboardMapper;
 import com.example.dataadmin.mapper.CollectInterfaceConfigMapper;
 import com.example.dataadmin.mapper.TelemetryParseRuleConfigMapper;
@@ -41,6 +39,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.beans.BeanUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
@@ -50,6 +49,8 @@ import org.apache.iotdb.session.pool.SessionPool;
 import org.apache.tsfile.utils.Binary;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -75,11 +76,6 @@ public class DataProcessingServiceImpl implements DataProcessingService {
     /** 任务下各采集接口实时处理速率Redis键前缀。 */
     private static final String PROCESSING_CURRENT_PREFIX =
             "dashboard:processing:current:";
-    /** 数据处理服务CPU和内存运行指标Redis键。 */
-    private static final String PROCESSING_RUNTIME_KEY =
-            "dashboard:processing:runtime";
-    /** 一个GB对应的字节数。 */
-    private static final double BYTES_PER_GB = 1024D * 1024D * 1024D;
     /** IoTDB页面查询允许的最大单页数量。 */
     private static final int MAX_IOTDB_PAGE_SIZE = 200;
 
@@ -89,8 +85,6 @@ public class DataProcessingServiceImpl implements DataProcessingService {
     /** 采集接口筛选项数据访问组件。 */
     private final CollectInterfaceConfigMapper collectInterfaceMapper;
 
-    /** 数据处理日志数据访问组件。 */
-    private final DataProcessLogMapper logMapper;
 
     /** 遥测解析规则数据访问组件。 */
     private final TelemetryParseRuleConfigMapper parseRuleMapper;
@@ -117,13 +111,15 @@ public class DataProcessingServiceImpl implements DataProcessingService {
     private final ParameterWorkbookParser workbookParser;
     /** Redis字符串访问组件。 */
     private final StringRedisTemplate redisTemplate;
+    /** 与系统告警共用的机器CPU和物理内存采集组件。 */
+    @Autowired
+    private SystemResourceMetrics systemResourceMetrics;
     /** 实时指标JSON读取组件。 */
     private final ObjectMapper objectMapper;
 
     public DataProcessingServiceImpl(
             DashboardMapper dashboardMapper,
             CollectInterfaceConfigMapper collectInterfaceMapper,
-            DataProcessLogMapper logMapper,
             TelemetryParseRuleConfigMapper parseRuleMapper,
             ProcessingRuleConfigMapper processingRuleConfigMapper,
             CollectInterfaceRuntimeSyncService runtimeSyncService,
@@ -140,7 +136,6 @@ public class DataProcessingServiceImpl implements DataProcessingService {
             ProcessedTelemetryQueryService processedTelemetryQueryService) {
         this.dashboardMapper = dashboardMapper;
         this.collectInterfaceMapper = collectInterfaceMapper;
-        this.logMapper = logMapper;
         this.parseRuleMapper = parseRuleMapper;
         this.processingRuleConfigMapper = processingRuleConfigMapper;
         this.runtimeSyncService = runtimeSyncService;
@@ -178,27 +173,30 @@ public class DataProcessingServiceImpl implements DataProcessingService {
         requireTaskId(taskId);
         DataProcessingRealtimeVO result = new DataProcessingRealtimeVO();
         try {
-            // 第一步：汇总当前任务下所有接口上一秒成功处理的PDXP条数。
-            long processRate = processingRate(taskId);
-            result.setProcessRate(processRate + " 条/秒");
-            // 第二步：读取数据处理服务最新的进程CPU和JVM内存指标。
-            applyRuntimeMetric(result);
+            // 第一步：汇总当前任务下所有接口按实际采样间隔计算的PDXP帧速率。
+            double processRate = processingRate(taskId);
+            // 展示时统一四舍五入，整数速率不追加无意义的小数位。
+            result.setProcessRate(BigDecimal.valueOf(processRate)
+                    .setScale(2, RoundingMode.HALF_UP)
+                    .stripTrailingZeros().toPlainString() + " 条/秒");
         } catch (RuntimeException ignored) {
             // Redis暂时不可用或缓存内容异常时返回带单位的零值，保证页面可用。
         }
+        // 第二步：机器资源独立采集，Redis异常也不影响CPU和内存的展示。
+        applyRuntimeMetric(result);
         return result;
     }
 
-    /** 汇总任务下所有采集接口上一秒的成功处理条数。 */
-    private long processingRate(String taskId) {
+    /** 汇总任务下所有采集接口按实际采样间隔计算的成功处理帧速率。 */
+    private double processingRate(String taskId) {
         Map<Object, Object> metrics = redisTemplate.opsForHash().entries(
                 PROCESSING_CURRENT_PREFIX + taskId);
-        long total = 0L;
+        double total = 0D;
         for (Object value : metrics.values()) {
             try {
                 // 每个接口独立解析，单条异常数据不影响其他接口的统计结果。
                 JsonNode metric = objectMapper.readTree(String.valueOf(value));
-                total += Math.max(0L, metric.path("processRate").asLong(0L));
+                total += Math.max(0D, metric.path("processRate").asDouble(0D));
             } catch (Exception ignored) {
                 // 非当前统计组件写入的无效字段不参与本次汇总。
             }
@@ -206,29 +204,14 @@ public class DataProcessingServiceImpl implements DataProcessingService {
         return total;
     }
 
-    /** 把数据处理服务运行指标换算为带单位的页面字段。 */
+    /** 将与系统告警同口径的机器资源指标格式化为页面字段。 */
     private void applyRuntimeMetric(DataProcessingRealtimeVO result) {
-        String value = redisTemplate.opsForValue().get(PROCESSING_RUNTIME_KEY);
-        if (value == null || value.trim().isEmpty()) {
-            return;
-        }
-        try {
-            JsonNode metric = objectMapper.readTree(value);
-            // CPU统一保留两位小数并直接追加百分号。
-            double cpuUsage = Math.max(
-                    0D, metric.path("cpuUsagePercent").asDouble(0D));
-            result.setCpuUsage(String.format(
-                    Locale.ROOT, "%.2f%%", cpuUsage));
-            // JVM已使用字节数换算为GB后保留两位小数。
-            long memoryBytes = Math.max(
-                    0L, metric.path("memoryUsageBytes").asLong(0L));
-            result.setMemoryUsage(String.format(
-                    Locale.ROOT,
-                    "%.2f GB",
-                    memoryBytes / BYTES_PER_GB));
-        } catch (Exception ignored) {
-            // 缓存格式异常时沿用VO中的带单位零值。
-        }
+        // 第一步：读取机器整体CPU使用率，保留两位小数并追加百分号。
+        result.setCpuUsage(String.format(
+                Locale.ROOT, "%.2f%%", systemResourceMetrics.readCpuUsage()));
+        // 第二步：读取机器物理内存使用率，保持与系统告警一致的计算口径。
+        result.setMemoryUsage(String.format(
+                Locale.ROOT, "%.2f%%", systemResourceMetrics.readMemoryUsage()));
     }
 
     @Override
@@ -501,60 +484,6 @@ public class DataProcessingServiceImpl implements DataProcessingService {
         // 事务提交后通知数据处理模块刷新当前接口的规则开关快照。
         runtimeSyncService.syncAfterCommit();
         return processingRuleConfigMapper.findByTaskId(config.getTaskId());
-    }
-
-    /** 使用PageHelper分页查询处理日志。 */
-    @Override
-    public PageResult<DataProcessLog> pageProcessLogs(
-            String taskId,
-            Long processTaskId,
-            Integer logLevel,
-            Integer pageNum,
-            Integer pageSize) {
-        if (!DataProcessLogLevel.isValid(logLevel)) {
-            throw new IllegalArgumentException("日志级别只能为1、2或3");
-        }
-        int safePageNum = pageNum == null ? 1 : Math.max(1, pageNum);
-        int safePageSize = pageSize == null ? 20
-                : Math.min(100, Math.max(1, pageSize));
-
-        // PageHelper只分页紧随其后的第一条MyBatis查询，中间不能插入其他查询。
-        PageHelper.startPage(safePageNum, safePageSize);
-        List<DataProcessLog> records = logMapper.findAll(
-                taskId, processTaskId, logLevel);
-        PageInfo<DataProcessLog> pageInfo = new PageInfo<>(records);
-
-        return new PageResult<DataProcessLog>(
-                pageInfo.getPageNum(),
-                pageInfo.getPageSize(),
-                pageInfo.getTotal(),
-                records);
-    }
-
-    /**
-     * 预留日志写入方法。
-     * 当前页面不会主动调用，后续由真实数据处理链路在关键处理节点调用。
-     */
-    @Override
-    @Transactional
-    public Long createProcessLog(DataProcessLog log) {
-        if (log == null || log.getTaskId() == null
-                || log.getTaskId().trim().isEmpty()
-                || log.getLogContent() == null
-                || log.getLogContent().trim().isEmpty()) {
-            throw new IllegalArgumentException("日志任务和日志内容不能为空");
-        }
-        if (!DataProcessLogLevel.isValid(log.getLogLevel())) {
-            throw new IllegalArgumentException("日志级别只能为1、2或3");
-        }
-        if (log.getLogTime() == null) {
-            log.setLogTime(LocalDateTime.now());
-        }
-        if (log.getLogLevel() == null) {
-            log.setLogLevel(DataProcessLogLevel.INFO.getCode());
-        }
-        logMapper.insert(log);
-        return log.getId();
     }
 
     /** 查询当前任务指定类型的设备卫星筛选项。 */

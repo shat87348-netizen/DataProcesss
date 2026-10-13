@@ -3,7 +3,7 @@
 <mapper namespace="com.example.dataadmin.mapper.CalibChannelConfigMapper">
 
     <!-- 公共查询字段。 -->
-    <sql id="columns">id, task_id, channel_name, channel_type, calibration_formula, normal_range, detect_method, sigma_value, fluctuation_rate, chauvenet_coef, min_sample_count, iterate_count, sample_window, dynamic_update, auto_clean, enabled, channel_status, is_deleted, create_time, update_time</sql>
+    <sql id="columns">id, task_id, channel_name, calibration_formula, normal_range, detect_method, sigma_value, fluctuation_rate, chauvenet_coef, min_sample_count, iterate_count, sample_window, dynamic_update, auto_clean, enabled, channel_status, is_deleted, create_time, update_time</sql>
 
     <!-- 按试验任务查询列表。 -->
     <select id="findAllByTaskId" resultType="com.example.dataadmin.entity.CalibChannelConfig">
@@ -42,7 +42,6 @@
             id,
             <if test="taskId != null and taskId != ''">task_id,</if>
             <if test="channelName != null">channel_name,</if>
-            <if test="channelType != null">channel_type,</if>
             <if test="calibrationFormula != null and calibrationFormula != ''">calibration_formula,</if>
             <if test="normalRange != null">normal_range,</if>
             <if test="detectMethod != null">detect_method,</if>
@@ -63,7 +62,6 @@
             #{id},
             <if test="taskId != null and taskId != ''">#{taskId},</if>
             <if test="channelName != null">#{channelName},</if>
-            <if test="channelType != null">#{channelType},</if>
             <if test="calibrationFormula != null and calibrationFormula != ''">#{calibrationFormula},</if>
             <if test="normalRange != null">#{normalRange},</if>
             <if test="detectMethod != null">#{detectMethod},</if>
@@ -87,7 +85,6 @@
         <set>
             <if test="taskId != null and taskId != ''">task_id = #{taskId},</if>
             <if test="channelName != null">channel_name = #{channelName},</if>
-            <if test="channelType != null">channel_type = #{channelType},</if>
             <if test="calibrationFormula != null and calibrationFormula != ''">calibration_formula = #{calibrationFormula},</if>
             <if test="normalRange != null">normal_range = #{normalRange},</if>
             <if test="detectMethod != null">detect_method = #{detectMethod},</if>

@@ -43,6 +43,11 @@ import java.util.concurrent.ThreadPoolExecutor;
 /** 可靠执行FEP文件对象上传和消息发布。 */
 @Service
 public class FepFileResultServiceImpl implements FepFileResultService {
+    /** 告警组件采用独立注入，复用已有离线构造入口。 */
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.example.dataprocess.service.DataAlarmRecorder alarmRecorder;
+
+
 
     /** 文件结果处理日志。 */
     private static final Logger LOGGER = LoggerFactory.getLogger(
@@ -263,6 +268,12 @@ public class FepFileResultServiceImpl implements FepFileResultService {
                     record.getId(),
                     failureMessage,
                     LocalDateTime.now().plusNanos(retryDelay * 1000000L));
+            if (alarmRecorder != null) {
+                alarmRecorder.recordForInterface(record.getInterfaceId(), com.example.common.enums.DataAlarmType.FILE_RESULT,
+                        "文件：" + record.getFileName() + "；记录ID：" + record.getId()
+                        + "；阶段：" + FepFileProcessStatus.getNameByCode(record.getProcessStatus())
+                        + "；重试次数：" + record.getRetryCount() + "；本次失败将自动重试；原因：" + failureMessage);
+            }
             LOGGER.warn("FEP文件后续处理失败，记录编号：{}，状态：{}，原因：{}",
                     record.getId(),
                     FepFileProcessStatus.getNameByCode(

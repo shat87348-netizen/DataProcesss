@@ -8,6 +8,9 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "interaction.heartbeat")
 public class InteractionHeartbeatProperties {
 
+    /** 是否开启交互系统心跳上报，默认开启。 */
+    private boolean enabled = true;
+
     /** 交互系统接口协议。 */
     private String scheme = "http";
 
@@ -34,6 +37,18 @@ public class InteractionHeartbeatProperties {
 
     /** HTTP响应读取超时时间，单位毫秒。 */
     private int readTimeoutMillis = 10_000;
+
+    /** 返回交互系统心跳上报开关。 */
+    public boolean isEnabled() {
+        // 读取当前配置中的开关状态。
+        return enabled;
+    }
+
+    /** 设置交互系统心跳上报开关。 */
+    public void setEnabled(boolean enabled) {
+        // 保存配置绑定的开关状态。
+        this.enabled = enabled;
+    }
 
     public String getScheme() {
         return scheme;

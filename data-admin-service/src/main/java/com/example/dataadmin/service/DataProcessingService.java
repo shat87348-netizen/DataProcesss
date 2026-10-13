@@ -1,7 +1,6 @@
 package com.example.dataadmin.service;
 
 import com.example.common.response.PageResult;
-import com.example.dataadmin.entity.DataProcessLog;
 import com.example.dataadmin.entity.TelemetryParseRuleConfig;
 import com.example.dataadmin.entity.ProcessingRuleConfig;
 import com.example.dataadmin.vo.processing.DataProcessingOverviewVO;
@@ -49,15 +48,6 @@ public interface DataProcessingService {
     ProcessingRuleConfig getProcessingRuleConfig(String taskId);
     /** 新增或更新任务级处理规则开关。 */
     ProcessingRuleConfig saveProcessingRuleConfig(ProcessingRuleConfig config);
-    /** 分页查询数据处理日志。 */
-    PageResult<DataProcessLog> pageProcessLogs(
-            String taskId,
-            Long processTaskId,
-            Integer logLevel,
-            Integer pageNum,
-            Integer pageSize);
-    /** 预留数据处理日志写入能力，自动产生日志的逻辑后续接入。 */
-    Long createProcessLog(DataProcessLog log);
     /** 查询当前任务指定类型的设备卫星筛选项。 */
     List<com.example.dataadmin.vo.processing.DeviceSatelliteOptionVO> listDeviceSatellites(String taskId, String type);
     /** 查询指定试验任务的遥测解析规则列表。 */

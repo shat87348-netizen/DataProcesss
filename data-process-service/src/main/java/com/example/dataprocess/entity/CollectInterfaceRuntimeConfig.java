@@ -23,7 +23,7 @@ public class CollectInterfaceRuntimeConfig {
     private String multicastIp;
     /** 传输方式：1UDP、2TCP、3HTTP。 */
     private Integer transferType;
-    /** 传输协议：1JSON、2PDXP、3Protobuf、4FEP。 */
+    /** 传输协议：1JSON、2PDXP、3FEP。 */
     private Integer transferProtocol;
     /** 是否启用RPC处理。 */
     private Integer rpcEnabled;

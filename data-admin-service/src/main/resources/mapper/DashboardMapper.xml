@@ -84,7 +84,6 @@
             send_from,
             transfer_type,
             transfer_protocol,
-            status,
             enabled
         from collect_interface_config
         where is_deleted = 0

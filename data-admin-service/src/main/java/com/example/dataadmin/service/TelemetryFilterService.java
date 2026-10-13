@@ -26,6 +26,12 @@ import java.util.Set;
 @Service
 @Transactional(readOnly = true)
 public class TelemetryFilterService {
+    /** 复用操作日志服务，离线构造时可不注入。 */
+    @org.springframework.beans.factory.annotation.Autowired
+    private OperationLogService operationLogs;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.example.dataadmin.mapper.MonitorDashboardWidgetMapper widgetMapper;
+
     private final DeviceSatelliteMapper deviceMapper;
     private final TelemetrySystemConfigMapper systemMapper;
     private final TelemetryParseRuleConfigMapper ruleMapper;
@@ -144,6 +150,10 @@ public class TelemetryFilterService {
     @Transactional(rollbackFor = Exception.class)
     public void update(TelemetryFilterSelectionRequest request) {
         requireTask(request.getTaskId());
+        // 参数勾选与整页可视化导入、参数表替换共同串行，锁内重新检查组件归属。
+        if (deviceMapper.lockForReplacement(request.getTaskId()) == null) {
+            throw new IllegalArgumentException("目标试验任务不存在");
+        }
         long scopeId = scopeService.require(request.getTaskId(),
                 request.getSelectionType(), request.getTargetId());
         TelemetryParseRuleConfig rule = ruleMapper.findActiveById(
@@ -151,9 +161,33 @@ public class TelemetryFilterService {
         if (rule == null) {
             throw new IllegalArgumentException("当前任务下不存在有效的遥测参数");
         }
+        boolean before = selectionMapper.findSelectedCodes(request.getTaskId(), rule.getDeviceSatelliteId(),
+                request.getSelectionType(), scopeId).contains(rule.getTelemetryCode());
+        boolean after = Boolean.TRUE.equals(request.getChecked());
+        // 请求返回成功但状态没有变化时，不写重复操作日志。
+        org.springframework.web.context.request.RequestAttributes attributes = org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+        if (attributes != null) {
+            attributes.setAttribute(com.example.dataadmin.config.OperationLogAdvice.SELECTION_RECORDED,
+                    true, org.springframework.web.context.request.RequestAttributes.SCOPE_REQUEST);
+        }
+        if (before == after) { return; }
         selectionMapper.save(request.getTaskId(), rule.getDeviceSatelliteId(),
                 rule.getTelemetryCode(), request.getSelectionType(), scopeId,
-                Boolean.TRUE.equals(request.getChecked()) ? 0 : 1);
+                after ? 0 : 1);
+        if (operationLogs != null) {
+            com.example.dataadmin.entity.DeviceSatellite device = deviceMapper.findActive(request.getTaskId(), rule.getDeviceSatelliteId());
+            String scope = com.example.dataadmin.enums.BusinessEnums.SelectionType.fromCode(request.getSelectionType()).getLabel();
+            com.example.dataadmin.entity.MonitorDashboardWidget widget = scopeId == 0 ? null : widgetMapper.findById(scopeId);
+            String detail = "筛选框：" + scope + "；目标ID：" + scopeId
+                    + (widget == null ? "" : "；组件名称：" + widget.getWidgetTitle() + "；组件ID：" + widget.getId())
+                    + "；设备卫星：" + (device == null ? "未取得名称" : device.getName()) + "；设备卫星ID：" + rule.getDeviceSatelliteId()
+                    + "；所属系统路径：" + rule.getSystemName() + "；参数名称：" + rule.getTelemetryName()
+                    + "；遥测代号：" + rule.getTelemetryCode() + "；参数ID：" + rule.getId()
+                    + "；状态：" + (before ? "已勾选" : "未勾选") + " → " + (after ? "已勾选" : "未勾选");
+            operationLogs.record(request.getTaskId(), com.example.dataadmin.enums.SystemLogSource.TELEMETRY_FILTER,
+                    com.example.dataadmin.enums.SystemLogLevel.INFO,
+                    scope + "遥测参数" + (after ? "已勾选" : "已取消勾选"), detail);
+        }
     }
 
     private void requireTask(String taskId) {

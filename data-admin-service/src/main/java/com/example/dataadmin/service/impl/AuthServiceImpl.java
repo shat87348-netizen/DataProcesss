@@ -88,6 +88,13 @@ public class AuthServiceImpl implements AuthService {
                 tokenId,
                 jwtSecret,
                 expireSeconds);
+        // 操作日志只读取该快照的用户名称和ID，不保存登录令牌。
+        org.springframework.web.context.request.RequestAttributes attributes =
+                org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+        if (attributes != null) {
+            attributes.setAttribute(com.example.dataadmin.config.OperationLogAdvice.ACTOR, loginUser,
+                    org.springframework.web.context.request.RequestAttributes.SCOPE_REQUEST);
+        }
         return new LoginVO(token, "Bearer", expireSeconds);
     }
 

@@ -11,11 +11,9 @@ public class ChannelSaveRequest {
     private String taskId;
     /** 校准通道名称。 */
     private String channelName;
-    /** 通道类型：1 温度，2 电压，3 电流，4 功率，5 姿态传感器。 */
-    private Integer channelType;
     /** 校准公式。 */
     private String calibrationFormula;
-    /** 正常数值范围。 */
+    /** 正常数值范围，仅阈值法必填。 */
     private String normalRange;
     /** 异常检测方法：1 莱特准则，2 阈值法，3 肖维涅法。 */
     private Integer detectMethod;
@@ -62,14 +60,6 @@ public class ChannelSaveRequest {
 
     public void setChannelName(String channelName) {
         this.channelName = channelName;
-    }
-
-    public Integer getChannelType() {
-        return channelType;
-    }
-
-    public void setChannelType(Integer channelType) {
-        this.channelType = channelType;
     }
 
     public String getCalibrationFormula() {

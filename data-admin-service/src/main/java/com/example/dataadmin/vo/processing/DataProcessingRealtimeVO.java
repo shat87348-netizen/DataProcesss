@@ -6,11 +6,11 @@ public class DataProcessingRealtimeVO {
     /** 当前处理速率，返回值直接包含条/秒单位。 */
     private String processRate = "0 条/秒";
 
-    /** 数据处理服务CPU使用率，返回值直接包含百分号。 */
+    /** 管理服务所在机器整体CPU使用率，与系统告警同口径，返回值直接包含百分号。 */
     private String cpuUsage = "0.00%";
 
-    /** 数据处理服务JVM已使用内存，返回值直接包含GB单位。 */
-    private String memoryUsage = "0.00 GB";
+    /** 管理服务所在机器物理内存使用率，与系统告警同口径，返回值直接包含百分号。 */
+    private String memoryUsage = "0.00%";
 
     public String getProcessRate() {
         return processRate;

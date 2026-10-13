@@ -1,7 +1,6 @@
 package com.example.dataadmin.mapper;
 
 import com.example.dataadmin.entity.SysRuntimeLog;
-import com.example.dataadmin.vo.collection.CollectionEventOverviewVO;
 import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDateTime;
@@ -22,8 +21,6 @@ public interface SysRuntimeLogMapper {
             @Param("keyword") String keyword,
             @Param("startTime") LocalDateTime startTime,
             @Param("endTime") LocalDateTime endTime);
-    /** 按试验任务查询非空日志来源。 */
-    List<String> findSourceNames(@Param("taskId") String taskId);
     /** 按试验任务ID查询业务数据列表。 */
     List<SysRuntimeLog> findAllByTaskId(@Param("taskId") String taskId);
     /** 按主键查询单条业务数据。 */
@@ -37,12 +34,5 @@ public interface SysRuntimeLogMapper {
     /** 删除指定试验任务的全部运行日志。 */
     int deleteByTaskId(@Param("taskId") String taskId);
 
-    /** 查询数据采集相关的最近事件。 */
-    List<SysRuntimeLog> findCollectionEvents(
-            @Param("taskId") String taskId,
-            @Param("limit") Integer limit);
 
-    /** 按事件级别统计数据采集相关事件。 */
-    CollectionEventOverviewVO findCollectionEventOverview(
-            @Param("taskId") String taskId);
 }

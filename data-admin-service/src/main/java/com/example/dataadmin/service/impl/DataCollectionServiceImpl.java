@@ -6,7 +6,6 @@ import com.example.dataadmin.dto.collection.InterfaceSaveRequest;
 import com.example.dataadmin.dto.collection.ProtocolSaveRequest;
 import com.example.dataadmin.entity.CollectInterfaceConfig;
 import com.example.dataadmin.entity.CollectProtocolConfig;
-import com.example.dataadmin.entity.SysRuntimeLog;
 import com.example.dataadmin.enums.BusinessEnums;
 import com.example.dataadmin.enums.EnumData;
 import com.example.dataadmin.mapper.CollectInterfaceConfigMapper;
@@ -15,12 +14,13 @@ import com.example.dataadmin.mapper.DeviceSatelliteMapper;
 import com.example.dataadmin.mapper.SysRuntimeLogMapper;
 import com.example.dataadmin.service.CollectInterfaceRuntimeSyncService;
 import com.example.dataadmin.service.DataCollectionService;
-import com.example.dataadmin.vo.collection.CollectionEventOverviewVO;
 import com.example.dataadmin.vo.collection.CollectionOverviewVO;
 import com.example.dataadmin.vo.collection.ProtocolConfigVO;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +32,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.LinkedHashMap;
+import java.util.Objects;
 
 /**
  * 数据采集业务实现。
@@ -43,10 +44,11 @@ import java.util.LinkedHashMap;
 @Transactional(readOnly = true)
 public class DataCollectionServiceImpl implements DataCollectionService {
 
-    private static final int DEFAULT_EVENT_LIMIT = 20;
-    private static final int MAX_EVENT_LIMIT = 100;
     /** UDP传输方式编码。 */
     private static final int TRANSFER_TYPE_UDP = 1;
+
+    /** 复用采集总览和采集统计组件的实时指标键格式。 */
+    private static final String COLLECTION_CURRENT_PREFIX = "dashboard:collection:current:";
 
     /** 采集接口数据访问组件。 */
     private final CollectInterfaceConfigMapper interfaceMapper;
@@ -56,14 +58,15 @@ public class DataCollectionServiceImpl implements DataCollectionService {
     /** 校验PDXP协议引用的设备卫星。 */
     private final DeviceSatelliteMapper deviceSatelliteMapper;
 
-    /** 系统运行日志数据访问组件。 */
-    private final SysRuntimeLogMapper runtimeLogMapper;
 
     /** 用于协议动态参数与 JSON 字符串之间的转换。 */
     private final ObjectMapper objectMapper;
 
     /** 采集接口运行任务同步组件。 */
     private final CollectInterfaceRuntimeSyncService interfaceRuntimeSyncService;
+
+    /** 批量读取当前页接口的Redis实时采集指标。 */
+    private final StringRedisTemplate redisTemplate;
 
     @Autowired
     public DataCollectionServiceImpl(
@@ -72,13 +75,14 @@ public class DataCollectionServiceImpl implements DataCollectionService {
             DeviceSatelliteMapper deviceSatelliteMapper,
             SysRuntimeLogMapper runtimeLogMapper,
             ObjectMapper objectMapper,
-            CollectInterfaceRuntimeSyncService interfaceRuntimeSyncService) {
+            CollectInterfaceRuntimeSyncService interfaceRuntimeSyncService,
+            StringRedisTemplate redisTemplate) {
         this.interfaceMapper = interfaceMapper;
         this.protocolMapper = protocolMapper;
         this.deviceSatelliteMapper = deviceSatelliteMapper;
-        this.runtimeLogMapper = runtimeLogMapper;
         this.objectMapper = objectMapper;
         this.interfaceRuntimeSyncService = interfaceRuntimeSyncService;
+        this.redisTemplate = redisTemplate;
     }
 
     /** 保留既有离线构造入口，运行环境使用包含设备校验组件的构造器。 */
@@ -88,7 +92,7 @@ public class DataCollectionServiceImpl implements DataCollectionService {
             ObjectMapper objectMapper,
             CollectInterfaceRuntimeSyncService interfaceRuntimeSyncService) {
         this(interfaceMapper, protocolMapper, null, runtimeLogMapper,
-                objectMapper, interfaceRuntimeSyncService);
+                objectMapper, interfaceRuntimeSyncService, null);
     }
 
     @Override
@@ -99,15 +103,94 @@ public class DataCollectionServiceImpl implements DataCollectionService {
     @Override
     public PageResult<CollectInterfaceConfig> pageInterfaceConfigs(
             InterfaceQueryRequest request) {
+        // 第一步：先执行原有分页查询，确定当前页接口和分页总数。
         long total = interfaceMapper.count(request);
         List<CollectInterfaceConfig> records = total == 0
                 ? Collections.<CollectInterfaceConfig>emptyList()
                 : interfaceMapper.findPage(request);
+        // 第二步：仅查询当前页接口的采集量和实时速率，再回填分页结果。
+        fillCollectionMetrics(request.getTaskId(), records);
+        // 第三步：返回原有分页结构，附带当前页接口的采集统计。
         return new PageResult<CollectInterfaceConfig>(
                 request.getPageNum(),
                 request.getPageSize(),
                 total,
                 records);
+    }
+
+    /** 分页完成后批量补充采集量和速率，空页不再访问统计表或Redis。 */
+    private void fillCollectionMetrics(String taskId, List<CollectInterfaceConfig> records) {
+        // 第一步：跳过空页，并为没有统计或缓存的接口设置零值。
+        if (records.isEmpty()) {
+            return;
+        }
+        Map<Long, CollectInterfaceConfig> interfaces = new LinkedHashMap<>();
+        Map<String, List<CollectInterfaceConfig>> taskInterfaces = new LinkedHashMap<>();
+        for (CollectInterfaceConfig config : records) {
+            config.setDataPacketCount(0L);
+            config.setInterfaceRateKbps(0D);
+            interfaces.put(config.getId(), config);
+            taskInterfaces.computeIfAbsent(config.getTaskId(), ignored -> new ArrayList<>())
+                    .add(config);
+        }
+
+        // 第二步：一次汇总当前页接口，核对任务编号后回填，避免接口换任务时串用历史量。
+        List<CollectInterfaceConfig> counts = interfaceMapper.findCollectionCounts(
+                taskId, new ArrayList<>(interfaces.keySet()));
+        for (CollectInterfaceConfig count : counts) {
+            CollectInterfaceConfig config = interfaces.get(count.getId());
+            if (config != null && Objects.equals(config.getTaskId(), count.getTaskId())) {
+                config.setDataPacketCount(count.getDataPacketCount());
+            }
+        }
+
+        // 第三步：按任务批量读取当前页接口字段，支持未指定任务的跨任务分页。
+        for (Map.Entry<String, List<CollectInterfaceConfig>> entry : taskInterfaces.entrySet()) {
+            fillCollectionRates(entry.getKey(), entry.getValue());
+        }
+    }
+
+    /** 同一任务的接口速率一次读取，缓存过期或Redis不可用时保留零值。 */
+    private void fillCollectionRates(String taskId, List<CollectInterfaceConfig> records) {
+        // 第一步：无任务的配置和既有离线构造入口不读取实时缓存。
+        if (taskId == null || taskId.trim().isEmpty() || redisTemplate == null) {
+            return;
+        }
+        List<Object> fields = new ArrayList<>();
+        for (CollectInterfaceConfig config : records) {
+            fields.add("interface:" + config.getId());
+        }
+
+        // 第二步：按当前页字段读取任务Hash，连接失败不影响接口列表和历史采集量。
+        List<Object> values;
+        try {
+            values = redisTemplate.opsForHash().multiGet(COLLECTION_CURRENT_PREFIX + taskId, fields);
+        } catch (RuntimeException ignored) {
+            return;
+        }
+        if (values == null) {
+            return;
+        }
+
+        // 第三步：逐项解析已有实时指标格式，异常字段独立跳过，不影响其他接口。
+        for (int index = 0; index < records.size() && index < values.size(); index++) {
+            Object value = values.get(index);
+            if (value == null) {
+                continue;
+            }
+            try {
+                JsonNode metric = objectMapper.readTree(String.valueOf(value));
+                JsonNode rate = metric == null ? null : metric.get("interfaceRateKbps");
+                if (rate != null && rate.isNumber()) {
+                    double rateKbps = rate.asDouble();
+                    if (Double.isFinite(rateKbps) && rateKbps >= 0) {
+                        records.get(index).setInterfaceRateKbps(rateKbps);
+                    }
+                }
+            } catch (JsonProcessingException ignored) {
+                // 无效实时指标保持默认零值，其他接口继续解析。
+            }
+        }
     }
 
     @Override
@@ -230,9 +313,24 @@ public class DataCollectionServiceImpl implements DataCollectionService {
     @Override
     @Transactional
     public void deleteProtocolConfig(Long id) {
+        // 第一步：确认协议存在，再检查所有未删除采集接口的绑定关系。
         getProtocolEntity(id);
+        requireProtocolUnbound(id);
+        // 第二步：无绑定时执行逻辑删除，数据库同时再次检查绑定条件。
         if (protocolMapper.delete(id) == 0) {
+            // 删除条件发生变化时重新取得接口名称，返回明确的绑定提示。
+            requireProtocolUnbound(id);
             throw new IllegalArgumentException("协议配置删除失败");
+        }
+    }
+
+    /** 未删除的采集接口仍占用协议，提示中列出所有绑定接口名称。 */
+    private void requireProtocolUnbound(Long protocolConfigId) {
+        List<String> interfaceNames = interfaceMapper.findActiveNamesByProtocolConfigId(
+                protocolConfigId);
+        if (!interfaceNames.isEmpty()) {
+            throw new IllegalArgumentException("协议配置已被采集接口【"
+                    + String.join("、", interfaceNames) + "】绑定，不能删除");
         }
     }
 
@@ -244,20 +342,6 @@ public class DataCollectionServiceImpl implements DataCollectionService {
         if (protocolMapper.updateEnabled(id, enabled) == 0) {
             throw new IllegalArgumentException("协议配置启用状态修改失败");
         }
-    }
-
-    @Override
-    public CollectionEventOverviewVO getEventOverview(String taskId) {
-        return runtimeLogMapper.findCollectionEventOverview(taskId);
-    }
-
-    @Override
-    public List<SysRuntimeLog> listEvents(String taskId, Integer limit) {
-        int queryLimit = limit == null ? DEFAULT_EVENT_LIMIT : limit;
-        if (queryLimit < 1 || queryLimit > MAX_EVENT_LIMIT) {
-            throw new IllegalArgumentException("事件查询数量必须在1到100之间");
-        }
-        return runtimeLogMapper.findCollectionEvents(taskId, queryLimit);
     }
 
     /**
@@ -284,7 +368,7 @@ public class DataCollectionServiceImpl implements DataCollectionService {
         config.setPort(request.getPort());
         // 空组播地址统一保存为null，避免重复校验受到空字符串影响。
         config.setMulticastIp(trimToNull(request.getMulticastIp()));
-        config.setStatus(request.getStatus() == null ? 1 : request.getStatus());
+        // 在线状态由最终启用开关派生，不接受前端单独指定状态。
         config.setEnabled(request.getEnabled() == null ? 1 : request.getEnabled());
         // RPC处理默认关闭，避免接口创建后在RPC定义不完整时误调用。
         config.setRpcEnabled(request.getRpcEnabled() == null
@@ -301,17 +385,13 @@ public class DataCollectionServiceImpl implements DataCollectionService {
         // 传输协议必须匹配采集接口使用的固定枚举。
         if (EnumData.labelOf(BusinessEnums.TransferProtocol.values(),
                 request.getTransferProtocol()) == null) {
-            throw new IllegalArgumentException("传输协议只能为1、2、3或4");
+            throw new IllegalArgumentException("传输协议只能为1（JSON）、2（PDXP）或3（FEP）");
         }
         // RPC开关与通用启用开关复用相同的枚举取值。
         validateEnabled(request.getRpcEnabled() == null
                 ? 0 : request.getRpcEnabled());
         // 只有UDP接口允许配置组播地址，有值时必须属于IP组播范围。
         validateMulticastIp(request.getTransferType(), request.getMulticastIp());
-        Integer status = request.getStatus() == null ? 1 : request.getStatus();
-        if (status < 0 || status > 2) {
-            throw new IllegalArgumentException("接口状态只能为0、1或2");
-        }
         // 两种处理方式都必须选择存在的协议配置。
         if (request.getProtocolConfigId() == null) {
             throw new IllegalArgumentException("协议配置不能为空");

@@ -1160,10 +1160,10 @@
           },
           "transferProtocol": {
             "type": "integer",
-            "description": "2为PDXP，4为FEP",
+            "description": "2为PDXP，3为FEP",
             "enum": [
               2,
-              4
+              3
             ]
           },
           "transferType": {
@@ -1238,10 +1238,10 @@
           },
           "transferProtocol": {
             "type": "integer",
-            "description": "2为PDXP，4为FEP",
+            "description": "2为PDXP，3为FEP",
             "enum": [
               2,
-              4
+              3
             ]
           },
           "transferType": {

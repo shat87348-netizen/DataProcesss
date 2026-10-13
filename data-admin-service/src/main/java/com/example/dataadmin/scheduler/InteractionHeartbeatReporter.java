@@ -36,6 +36,11 @@ public class InteractionHeartbeatReporter {
     /** 按配置间隔上报一次正常心跳，单次失败不影响后续调度。 */
     @Scheduled(fixedRateString = "${interaction.heartbeat.interval-millis:10000}")
     public void report() {
+        // 开关关闭时跳过本次上报，不构造请求或访问交互系统。
+        if (!properties.isEnabled()) {
+            return;
+        }
+
         try {
             // 第一步：从配置和状态枚举构造本次心跳请求。
             InteractionHeartbeatRequest request = buildNormalRequest();

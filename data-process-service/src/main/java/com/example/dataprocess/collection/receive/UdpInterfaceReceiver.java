@@ -21,6 +21,14 @@ public final class UdpInterfaceReceiver implements CollectInterfaceReceiver {
     private final UdpTool.DatagramEndpoint endpoint;
     /** 当前接口对应的协议会话。 */
     private final ProtocolHandler.UdpSession protocolSession;
+    /** 接收异常复用异步告警组件，由接口管理器在提交前注入。 */
+    private com.example.dataprocess.service.DataAlarmRecorder alarmRecorder;
+    public void setAlarmRecorder(com.example.dataprocess.service.DataAlarmRecorder recorder) { this.alarmRecorder = recorder; }
+    private void recordFailure(String detail) {
+        if (alarmRecorder != null) {
+            alarmRecorder.record(config, com.example.common.enums.DataAlarmType.INTERFACE_STOP, detail);
+        }
+    }
     /** 是否继续接收数据。 */
     private volatile boolean running = true;
 
@@ -71,12 +79,17 @@ public final class UdpInterfaceReceiver implements CollectInterfaceReceiver {
                     protocolSession.handle(packet);
                 } catch (RuntimeException exception) {
                     // 单个协议包异常只提示，不结束整个UDP采集接口。
+                    if (alarmRecorder != null) {
+                        alarmRecorder.record(config, com.example.common.enums.DataAlarmType.COLLECTION_RECEIVE,
+                                "当前UDP报文提交失败，接口继续接收：" + exception.getMessage());
+                    }
                     LOGGER.warn("UDP报文提交协议处理失败，接口编号：{}，原因：{}",
                             config.getInterfaceId(), exception.getMessage());
                 }
             }
         } catch (IOException exception) {
             if (running) {
+                recordFailure("UDP接收失败，接口已停止接收：" + exception.getMessage());
                 LOGGER.error("UDP采集接口接收失败，接口编号：{}",
                         config.getInterfaceId(), exception);
             }

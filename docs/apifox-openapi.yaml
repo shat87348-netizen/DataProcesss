@@ -3,7 +3,7 @@ info:
   title: 数据处理软件接口
   description: |
     data-admin-service 后台管理接口文档。
-    查询接口统一使用 GET，写操作统一使用 POST，所有 POST 请求参数均使用 JSON DTO 对象。
+    查询接口统一使用 GET，写操作统一使用 POST；普通写操作使用 JSON DTO，文件导入使用 multipart/form-data。
     登录成功后，请在 Apifox 中配置 Bearer Token。
     标记为必填的 taskId 必须放在查询参数中，例如 ?taskId=TASK-20260908-001，请替换为实际任务编号；仅放在 JSON 请求体中无效。
     缺少必填请求参数时返回 HTTP 400，例如 {"code":400,"message":"缺少必填请求参数：taskId"}。
@@ -15,7 +15,7 @@ info:
     通过fields中的参数解析配置id关联当前任务下的设备卫星信息，本地处理不填写satCode，设备名称第一个下划线前后分别写入channelName和bussinessId；帧原码去掉数据域前5字节自定义数据和末尾4字节遥测头，按小端低位优先读取无符号原始整数x，按formulaType设置valueType：300为FLOAT、301为DOUBLE、302为TEXT、303为TIME，其他类型保留RAW。数值按formulaDesc计算，processParam用斜线分隔并依次绑定a、b等参数，decimalPlaces指定四舍五入小数位数。
     示例：遥测数据为CD AB，三行配置(tableIndex, telemetryCode, bitWidth)为(1, TM001, 3)、(2, TM002, 9)、(3, TM003, 4)，对应原始值为5、377、10，汇总为一帧TelemetryMessage。
     每项Telemetry的table_index取tableIndex、tm_symbol及字典键取telemetryCode；未配置公式类型时value为原始数值、value_text为精确十进制文本、value_type为原码；配置300至303时按对应规则生成物理量或文本，raw_data为低位对齐的小端字段字节。
-  version: 2.6.0
+  version: 2.8.0
 
 servers:
   - url: http://localhost:8082
@@ -251,7 +251,7 @@ paths:
                 data:
                   range: [{ value: "3h", label: "近3小时" }, { value: "24h", label: "近24小时" }, { value: "7d", label: "近7天" }]
                   dataType: [{ value: 1, label: "实时遥测" }, { value: 2, label: "延时遥测" }, { value: 3, label: "载荷业务" }]
-                  status: [{ value: 0, label: "离线" }, { value: 1, label: "在线" }, { value: 2, label: "异常" }]
+                  status: [{ value: 0, label: "离线" }, { value: 1, label: "在线" }]
 
   /system/users/findData:
     get:
@@ -294,10 +294,10 @@ paths:
                 data:
                   interfaceType: [{ value: 1, label: "外部接口" }, { value: 2, label: "内部接口" }]
                   transferType: [{ value: 1, label: "UDP" }, { value: 2, label: "TCP" }, { value: 3, label: "HTTP" }]
-                  transferProtocol: [{ value: 1, label: "JSON" }, { value: 2, label: "PDXP" }, { value: 3, label: "Protobuf" }, { value: 4, label: "FEP" }]
+                  transferProtocol: [{ value: 1, label: "JSON" }, { value: 2, label: "PDXP" }, { value: 3, label: "FEP" }]
                   protocolType: [{ value: 1, label: "JSON" }, { value: 2, label: "PDXP" }, { value: 3, label: "Protobuf" }, { value: 4, label: "RPC" }]
                   dataSourceType: [{ value: 1, label: "遥测" }, { value: 2, label: "遥感" }, { value: 3, label: "设备" }, { value: 4, label: "环境" }]
-                  status: [{ value: 0, label: "离线" }, { value: 1, label: "在线" }, { value: 2, label: "异常" }]
+                  status: [{ value: 0, label: "离线" }, { value: 1, label: "在线" }]
                   enabled: [{ value: 0, label: "禁用" }, { value: 1, label: "启用" }]
 
   /visualization/findData:
@@ -320,7 +320,8 @@ paths:
 
   /processing/findData:
     get:
-      tags: [数据处理]
+      tags:
+      - 数据处理
       summary: 查询数据处理枚举
       responses:
         '200':
@@ -329,13 +330,34 @@ paths:
             application/json:
               example:
                 code: 200
-                message: "操作成功"
+                message: 操作成功
                 data:
-                  taskStatus: [{ value: 0, label: "等待中" }, { value: 1, label: "运行中" }, { value: 2, label: "已完成" }]
-                  logLevel: [{ value: 1, label: "信息" }, { value: 2, label: "警告" }, { value: 3, label: "错误" }]
-                  ruleEnabled: [{ value: 0, label: "禁用" }, { value: 1, label: "启用" }]
-                  storeFlag: [{ value: 0, label: "否" }, { value: 1, label: "是" }]
-                  selectionType: [{ value: 1, label: "处理后数据表格" }, { value: 2, label: "处理后数据曲线" }, { value: 3, label: "数据可视化表格" }, { value: 4, label: "数据可视化曲线" }]
+                  taskStatus:
+                  - value: 0
+                    label: 等待中
+                  - value: 1
+                    label: 运行中
+                  - value: 2
+                    label: 已完成
+                  ruleEnabled:
+                  - value: 0
+                    label: 禁用
+                  - value: 1
+                    label: 启用
+                  storeFlag:
+                  - value: 0
+                    label: 否
+                  - value: 1
+                    label: 是
+                  selectionType:
+                  - value: 1
+                    label: 处理后数据表格
+                  - value: 2
+                    label: 处理后数据曲线
+                  - value: 3
+                    label: 数据可视化表格
+                  - value: 4
+                    label: 数据可视化曲线
 
   /calibration/findData:
     get:
@@ -350,7 +372,6 @@ paths:
                 code: 200
                 message: "操作成功"
                 data:
-                  channelType: [{ value: 1, label: "温度传感器" }, { value: 2, label: "电压传感器" }, { value: 3, label: "电流传感器" }, { value: 4, label: "功率传感器" }, { value: 5, label: "姿态传感器" }]
                   detectMethod: [{ value: 1, label: "莱特准则" }, { value: 2, label: "阈值法" }, { value: 3, label: "肖维涅法" }]
                   dynamicUpdate: [{ value: 0, label: "否" }, { value: 1, label: "是" }]
                   autoClean: [{ value: 0, label: "否" }, { value: 1, label: "是" }]
@@ -360,32 +381,239 @@ paths:
 
   /alarms/findData:
     get:
-      tags: [告警管理]
+      tags:
+      - 告警管理
       summary: 查询告警管理枚举
       responses:
         '200':
           description: 操作成功
           content:
             application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    description: 业务状态码
+                  message:
+                    type: string
+                    description: 中文结果说明
+                  data:
+                    type: object
+                    properties:
+                      dataAlarmSource:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/EnumOption'
+                      dataAlarmEventType:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/EnumOption'
+                      dataAlarmLevel:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/EnumOption'
+                      dataAlarmStatus:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/EnumOption'
+                      systemAlarmLevel:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/EnumOption'
+                      systemAlarmStatus:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/EnumOption'
+                      serviceStatus:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/EnumOption'
+                      metricCode:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/EnumOption'
+                      heartbeatStatus:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/EnumOption'
+                      changeType:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/EnumOption'
+                      systemAlarmType:
+                        type: array
+                        description: 系统告警类型编码和中文名称，复用监测指标枚举
+                        items:
+                          $ref: '#/components/schemas/EnumOption'
               example:
                 code: 200
-                message: "操作成功"
+                message: 操作成功
                 data:
-                  dataAlarmLevel: [{ value: 1, label: "提示" }, { value: 2, label: "一般" }, { value: 3, label: "轻微" }, { value: 4, label: "严重" }, { value: 5, label: "紧急" }]
-                  dataAlarmStatus: [{ value: 0, label: "未处理" }, { value: 1, label: "已处理" }]
-                  systemAlarmLevel: [{ value: 1, label: "提示" }, { value: 2, label: "一般" }, { value: 3, label: "严重" }]
-                  systemAlarmStatus: [{ value: 0, label: "未恢复" }, { value: 1, label: "已恢复" }]
+                  dataAlarmSource:
+                  - value: COLLECTION
+                    label: 数据采集
+                  - value: PROCESSING
+                    label: 数据处理
+                  - value: CALIBRATION
+                    label: 数据校准
+                  dataAlarmEventType:
+                  - value: INTERFACE_SYNC
+                    label: 采集运行状态同步失败
+                  - value: INTERFACE_START
+                    label: 接口启动失败
+                  - value: INTERFACE_STOP
+                    label: 采集接口停止接收
+                  - value: COLLECTION_RECEIVE
+                    label: 接口接收异常
+                  - value: PACKET_PARSE
+                    label: 报文解析失败
+                  - value: FILE_RECEIVE
+                    label: 文件接收失败
+                  - value: PROCESS_QUEUE
+                    label: 处理队列已满
+                  - value: PROCESS_CONFIG
+                    label: 参数处理失败
+                  - value: RPC_FAILURE
+                    label: 远程处理失败
+                  - value: PARAMETER_RANGE
+                    label: 遥测参数越限
+                  - value: STORAGE_FAILURE
+                    label: 数据存储失败
+                  - value: MESSAGE_FAILURE
+                    label: 结果消息发送失败
+                  - value: FILE_RESULT
+                    label: 文件结果处理失败
+                  - value: CALIBRATION_OUTLIER
+                    label: 校准野值
+                  - value: CALIBRATION_RULE
+                    label: 校准规则异常
+                  - value: CALIBRATION_CACHE
+                    label: 校准缓存失败
+                  - value: CALIBRATION_PERSIST
+                    label: 校准记录落库失败
+                  dataAlarmLevel:
+                  - value: 2
+                    label: 一般
+                  - value: 4
+                    label: 严重
+                  dataAlarmStatus:
+                  - value: 0
+                    label: 未处理
+                  - value: 1
+                    label: 已处理
+                  systemAlarmLevel:
+                  - value: 2
+                    label: 一般
+                  - value: 3
+                    label: 严重
+                  systemAlarmStatus:
+                  - value: 0
+                    label: 未恢复
+                  - value: 1
+                    label: 已恢复
+                  serviceStatus:
+                  - value: RUNNING
+                    label: 运行中
+                  - value: DOWN
+                    label: 停止
+                  - value: ERROR
+                    label: 查询异常
+                  metricCode:
+                  - value: cpu_usage
+                    label: CPU使用率
+                  - value: memory_usage
+                    label: 内存使用率
+                  - value: disk_usage
+                    label: 磁盘使用率
+                  - value: queue_depth
+                    label: 消息积压数量
+                  heartbeatStatus:
+                  - value: NORMAL
+                    label: 正常
+                  - value: WAITING
+                    label: 等待心跳
+                  changeType:
+                  - value: CREATED
+                    label: 新增
+                  - value: UPDATED
+                    label: 持续触发
+                  - value: RECOVERED
+                    label: 已恢复
+                  systemAlarmType:
+                  - value: cpu_usage
+                    label: CPU使用率
+                  - value: memory_usage
+                    label: 内存使用率
+                  - value: disk_usage
+                    label: 磁盘使用率
+                  - value: queue_depth
+                    label: 消息积压数量
 
   /system/logs/findData:
     get:
-      tags: [系统日志]
+      tags:
+      - 系统日志
       summary: 查询系统日志枚举
+      description: 返回日志级别和全部固定业务来源。英文value用于数据库录入和来源筛选，中文label仅用于展示；选项不依赖任务或已有日志。
       responses:
         '200':
           description: 操作成功
           content:
             application/json:
-              example: { code: 200, message: "操作成功", data: { logLevel: [{ value: "DEBUG", label: "调试" }, { value: "INFO", label: "信息" }, { value: "WARN", label: "警告" }, { value: "ERROR", label: "错误" }] } }
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    description: 业务状态码
+                  message:
+                    type: string
+                    description: 中文结果说明
+                  data:
+                    type: object
+                    properties:
+                      logLevel:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/EnumOption'
+                      logSource:
+                        type: array
+                        description: 固定日志来源，英文value用于录入和筛选，中文label用于展示
+                        items:
+                          $ref: '#/components/schemas/EnumOption'
+              example:
+                code: 200
+                message: 操作成功
+                data:
+                  logLevel:
+                  - value: INFO
+                    label: 信息
+                  - value: WARN
+                    label: 警告
+                  - value: ERROR
+                    label: 错误
+                  logSource:
+                  - value: COLLECTION
+                    label: 数据采集
+                  - value: PROCESSING
+                    label: 数据处理
+                  - value: CALIBRATION
+                    label: 数据校准
+                  - value: VISUALIZATION
+                    label: 数据可视化
+                  - value: TELEMETRY_FILTER
+                    label: 遥测参数筛选
+                  - value: ALARM_MANAGEMENT
+                    label: 告警管理
+                  - value: USER_MANAGEMENT
+                    label: 用户管理
+                  - value: ROLE_MANAGEMENT
+                    label: 角色管理
+                  - value: SATELLITE_CATALOG
+                    label: 卫星目录
+                  - value: AUTHENTICATION
+                    label: 用户认证
 
   /experiment/tasks:
     get:
@@ -989,6 +1217,7 @@ paths:
     get:
       tags: [数据采集]
       summary: 分页查询采集接口
+      description: '先分页查询采集接口，再批量补充当前页统计。dataPacketCount按任务和接口汇总collect_interface_statistics.collection_count，包含已归档窗口；PDXP按完整帧、FEP按完整文件计数，无统计时返回0。interfaceRateKbps读取Redis最新采集速率，单位KB/s，缓存有效期5秒，缓存缺失或Redis不可用时返回0。'
       parameters:
         - $ref: '#/components/parameters/TaskId'
         - name: interfaceType
@@ -1021,21 +1250,18 @@ paths:
                 name: "HTTP"
                 description: "3 表示 HTTP 传输"
         - name: status
-          description: "接口状态筛选条件。枚举：0 停用，1 启用，2 异常"
+          description: "按启用开关筛选接口状态：0离线（禁用），1在线（启用）"
           in: query
           schema:
             type: integer
-            enum: [0, 1, 2]
+            enum: [0, 1]
             x-apifox-enum:
               - value: 0
-                name: "停用"
-                description: "0 表示停用"
+                name: "离线"
+                description: "0 表示离线"
               - value: 1
-                name: "启用"
-                description: "1 表示启用"
-              - value: 2
-                name: "异常"
-                description: "2 表示异常"
+                name: "在线"
+                description: "1 表示在线"
         - name: enabled
           description: "启用状态筛选条件。枚举：0 禁用，1 启用"
           in: query
@@ -1121,8 +1347,8 @@ paths:
                       description: "3 表示HTTP"
                 transferProtocol:
                   type: integer
-                  description: "传输协议：1JSON 2PDXP 3Protobuf 4FEP"
-                  enum: [1, 2, 3, 4]
+                  description: "传输协议：1JSON 2PDXP 3FEP"
+                  enum: [1, 2, 3]
                   x-apifox-enum:
                     - value: 1
                       name: "JSON"
@@ -1131,11 +1357,8 @@ paths:
                       name: "PDXP"
                       description: "2 表示PDXP"
                     - value: 3
-                      name: "Protobuf"
-                      description: "3 表示Protobuf"
-                    - value: 4
                       name: "FEP"
-                      description: "4 表示FEP"
+                      description: "3 表示FEP"
                 protocolConfigId:
                   type: integer
                   description: "协议配置ID，本地处理和RPC处理都必填"
@@ -1150,23 +1373,7 @@ paths:
                   type: string
                   nullable: true
                   description: "UDP组播地址；填写时按组播接收，为空时按单播接收"
-                status:
-                  type: integer
-                  description: "采集接口运行状态。枚举：0 离线，1 在线，2 异常"
-                  enum:
-                    - 0
-                    - 1
-                    - 2
-                  x-apifox-enum:
-                    - value: 0
-                      name: "离线"
-                      description: "0 表示离线"
-                    - value: 1
-                      name: "在线"
-                      description: "1 表示在线"
-                    - value: 2
-                      name: "异常"
-                      description: "2 表示异常"
+
                 enabled:
                   type: integer
                   description: "是否启用通道：0否 1是。枚举：0 禁用，1 启用"
@@ -1211,7 +1418,6 @@ paths:
                   host: "192.168.1.10"
                   port: 9001
                   multicastIp: "239.1.1.1"
-                  status: 0
                   enabled: 1
                   rpcEnabled: 1
                   remark: "主链路"
@@ -1229,7 +1435,6 @@ paths:
                   host: "192.168.1.10"
                   port: 9001
                   multicastIp: null
-                  status: 0
                   enabled: 1
                   rpcEnabled: 0
                   remark: "主链路"
@@ -1297,8 +1502,8 @@ paths:
                       description: "3 表示HTTP"
                 transferProtocol:
                   type: integer
-                  description: "传输协议：1JSON 2PDXP 3Protobuf 4FEP"
-                  enum: [1, 2, 3, 4]
+                  description: "传输协议：1JSON 2PDXP 3FEP"
+                  enum: [1, 2, 3]
                   x-apifox-enum:
                     - value: 1
                       name: "JSON"
@@ -1307,11 +1512,8 @@ paths:
                       name: "PDXP"
                       description: "2 表示PDXP"
                     - value: 3
-                      name: "Protobuf"
-                      description: "3 表示Protobuf"
-                    - value: 4
                       name: "FEP"
-                      description: "4 表示FEP"
+                      description: "3 表示FEP"
                 protocolConfigId:
                   type: integer
                   description: "协议配置ID，本地处理和RPC处理都必填"
@@ -1326,23 +1528,7 @@ paths:
                   type: string
                   nullable: true
                   description: "UDP组播地址；填写时按组播接收，为空时按单播接收"
-                status:
-                  type: integer
-                  description: "采集接口运行状态。枚举：0 离线，1 在线，2 异常"
-                  enum:
-                    - 0
-                    - 1
-                    - 2
-                  x-apifox-enum:
-                    - value: 0
-                      name: "离线"
-                      description: "0 表示离线"
-                    - value: 1
-                      name: "在线"
-                      description: "1 表示在线"
-                    - value: 2
-                      name: "异常"
-                      description: "2 表示异常"
+
                 enabled:
                   type: integer
                   description: "是否启用通道：0否 1是。枚举：0 禁用，1 启用"
@@ -1388,7 +1574,6 @@ paths:
                   host: "192.168.1.11"
                   port: 9001
                   multicastIp: "239.1.1.1"
-                  status: 1
                   enabled: 1
                   rpcEnabled: 1
                   remark: "主链路"
@@ -1407,7 +1592,6 @@ paths:
                   host: "192.168.1.11"
                   port: 9001
                   multicastIp: null
-                  status: 1
                   enabled: 1
                   rpcEnabled: 0
                   remark: "主链路"
@@ -1475,20 +1659,22 @@ paths:
 
   /internal/collection/interfaces/sync:
     post:
-      tags: [数据处理-采集接口同步]
+      tags:
+      - 数据处理-采集接口同步
       summary: 通知数据处理服务同步采集接口
-      description: Admin传入当前应该运行的完整采集接口ID列表；空列表表示停止全部采集接口。数据处理服务按ID自行查询host、port、rpc_enabled及协议配置。
+      description: Admin传入当前应该运行的完整采集接口ID列表；空列表表示停止全部采集接口。数据处理服务按ID自行查询host、port、rpc_enabled及协议配置。 返回data为实际完成端口绑定并成功提交采集任务的运行接口ID列表；启用配置成功不等于采集接口启动。
       security: []
       servers:
-        - url: http://localhost:8083
-          description: 数据处理服务
+      - url: http://localhost:8083
+        description: 数据处理服务
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [interfaceIds]
+              required:
+              - interfaceIds
               properties:
                 interfaceIds:
                   type: array
@@ -1498,16 +1684,36 @@ paths:
                     type: integer
                     format: int64
             example:
-              interfaceIds: [11, 12, 13]
+              interfaceIds:
+              - 11
+              - 12
+              - 13
       responses:
         '200':
-          description: 同步成功
+          description: 操作成功
           content:
             application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    description: 业务状态码
+                  message:
+                    type: string
+                    description: 中文结果说明
+                  data:
+                    type: array
+                    items:
+                      type: integer
+                      description: 端口绑定成功且任务仍运行的接口ID
+                      format: int64
               example:
                 code: 200
-                message: "操作成功"
-                data: null
+                message: 操作成功
+                data:
+                - 11
+                - 12
 
   /internal/collection/test/pdxp/start:
     post:
@@ -2091,6 +2297,7 @@ paths:
     post:
       tags: [数据采集]
       summary: 删除协议配置
+      description: "逻辑删除协议配置。存在未删除的采集接口绑定时禁止删除，无论接口是否启用；失败提示列出绑定接口名称，例如：协议配置已被采集接口【接口A、接口B】绑定，不能删除。已删除采集接口不阻止删除。"
       requestBody:
         required: true
         content:
@@ -2107,6 +2314,20 @@ paths:
       responses:
         '200':
           $ref: '#/components/responses/Success032'
+        '400':
+          description: "协议配置存在未删除的采集接口绑定，或协议配置不存在。"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+              example:
+                code: 400
+                message: "协议配置已被采集接口【接口A、接口B】绑定，不能删除"
 
   /collection/protocols/enabled:
     post:
@@ -2143,25 +2364,75 @@ paths:
         '200':
           $ref: '#/components/responses/Success033'
 
-  /collection/events/overview:
+  /visualization/config/export:
     get:
-      tags: [数据采集]
-      summary: 查询采集事件统计
+      tags: [数据可视化]
+      summary: 导出当前用户整页可视化配置
+      description: 下载JSON配置文件，包含隐藏组件、网格布局、每个组件已勾选的遥测参数及已有数据项。未勾选遥测参数、实时数值、告警记录和文件实体不导出；文件不包含源数据库主键。成功响应为配置文件本身，不包裹code/message/data。
       parameters:
-        - $ref: '#/components/parameters/TaskId'
+        - $ref: '#/components/parameters/RequiredTaskId'
       responses:
         '200':
-          $ref: '#/components/responses/Success034'
+          description: 可重新导入的JSON配置附件，最大10MB
+          headers:
+            Content-Disposition:
+              description: 附件下载及UTF-8文件名
+              schema: {type: string}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VisualizationConfigFile'}
+        '400':
+          description: 任务无效、组件配置不合法、关联失效或文件超过限制；统一返回中文错误信息
 
-  /collection/events:
-    get:
-      tags: [数据采集]
-      summary: 查询最近采集事件
+  /visualization/config/import/preview:
+    post:
+      tags: [数据可视化]
+      summary: 检查可视化配置导入文件
+      description: 只读检查文件结构以及目标任务的参数、采集接口和协议关联。valid=false时展示errors，不允许导入；最多返回100条中文问题。当前登录用户由令牌确定。文件最多500个组件，参数勾选与数据项合计最多50000条。任务无效、空文件或超过10MB返回错误响应。
       parameters:
-        - $ref: '#/components/parameters/TaskId'
+        - $ref: '#/components/parameters/RequiredTaskId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: 本系统导出的.json配置文件，最大10MB
       responses:
         '200':
-          $ref: '#/components/responses/Success035'
+          $ref: '#/components/responses/VisualizationConfigCheckSuccess'
+        '400':
+          description: 必填参数缺失、任务无效、空文件或超大文件
+
+  /visualization/config/import:
+    post:
+      tags: [数据可视化]
+      summary: 事务替换当前用户整页可视化配置
+      description: 上传检查时的同一文件，服务端在任务锁内重新检查。按设备卫星类型、编码和遥测代号匹配有效参数，接口和协议按目标任务内唯一名称匹配；任意缺失、重名或非法配置均阻止导入。全部通过后只替换当前用户目标任务的组件、数据项和组件勾选，生成新组件主键；任何异常整体回滚。显式widgets空数组表示清空当前用户目标任务页面，须由前端明确提示。成功后重新加载组件列表和筛选树，旧组件主键失效。
+      parameters:
+        - $ref: '#/components/parameters/RequiredTaskId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: 检查时使用的同一.json配置文件，最大10MB；必须重新上传文件
+      responses:
+        '200':
+          $ref: '#/components/responses/VisualizationConfigCheckSuccess'
+        '400':
+          description: 校验或关联匹配失败，原页面配置保持完整；统一返回中文错误信息
 
   /visualization/widgets:
     get:
@@ -2660,7 +2931,7 @@ paths:
     get:
       tags: [数据处理]
       summary: 查询实时处理监控
-      description: 查询当前任务下所有接口上一秒成功处理的PDXP数据总量，并返回数据处理服务的CPU和JVM内存使用情况；三个字段均直接包含展示单位。
+      description: 查询当前任务下所有接口的PDXP帧处理速率之和，各接口按业务处理完成且IoTDB与MQ异步任务均提交成功的帧数除以实际采样秒数计算，不代表异步入库或消息发送成功；CPU和物理内存复用系统告警的管理服务所在机器采集逻辑。三个字段均直接包含展示单位，处理速率最多保留两位小数。
       parameters:
         - $ref: '#/components/parameters/RequiredTaskId'
       responses:
@@ -2722,12 +2993,22 @@ paths:
         - name: selectionType
           in: query
           required: false
-          description: 1处理后数据表格，3数据可视化表格；默认1
-          schema: { type: integer, enum: [1, 3], default: 1 }
+          description: "勾选场景：1处理后数据表格，3数据可视化表格；默认1。查询该场景及目标下已保存的参数勾选。"
+          schema:
+            type: integer
+            enum: [1, 3]
+            default: 1
+            x-apifox-enum:
+              - value: 1
+                name: "处理后数据表格"
+                description: "处理后数据表格的参数勾选，targetId必须为0"
+              - value: 3
+                name: "数据可视化表格"
+                description: "数据可视化表格的参数勾选，targetId为对应组件的widgetId"
         - name: targetId
           in: query
           required: false
-          description: 固定页面为0；数据可视化表格为组件主键
+          description: "勾选目标主键：selectionType=1时必须为0；selectionType=3时填写当前任务、当前用户的数据可视化表格组件widgetId，组件类型必须为实时数据。不是设备卫星ID或参数解析配置ID。"
           schema: { type: integer, format: int64, default: 0 }
       responses:
         '200':
@@ -2743,12 +3024,22 @@ paths:
         - name: selectionType
           in: query
           required: false
-          description: 2处理后数据曲线，4数据可视化曲线；默认2
-          schema: { type: integer, enum: [2, 4], default: 2 }
+          description: "勾选场景：2处理后数据曲线，4数据可视化曲线；默认2。查询该场景及目标下已保存的参数勾选。"
+          schema:
+            type: integer
+            enum: [2, 4]
+            default: 2
+            x-apifox-enum:
+              - value: 2
+                name: "处理后数据曲线"
+                description: "处理后数据曲线的参数勾选，targetId必须为0"
+              - value: 4
+                name: "数据可视化曲线"
+                description: "数据可视化曲线的参数勾选，targetId为对应组件的widgetId"
         - name: targetId
           in: query
           required: false
-          description: 固定页面为0；数据可视化曲线为组件主键
+          description: "勾选目标主键：selectionType=2时必须为0；selectionType=4时填写当前任务、当前用户的数据可视化曲线组件widgetId，组件类型必须为实时曲线。不是设备卫星ID或参数解析配置ID。"
           schema: { type: integer, format: int64, default: 0 }
       responses:
         '200':
@@ -2872,12 +3163,27 @@ paths:
         - name: selectionType
           in: query
           required: true
-          description: 1处理后数据表格，2处理后数据曲线，3数据可视化表格，4数据可视化曲线
-          schema: { type: integer, enum: [1, 2, 3, 4] }
+          description: "勾选场景：1处理后数据表格，2处理后数据曲线，3数据可视化表格，4数据可视化曲线。决定返回哪个场景下的checked勾选状态。"
+          schema:
+            type: integer
+            enum: [1, 2, 3, 4]
+            x-apifox-enum:
+              - value: 1
+                name: "处理后数据表格"
+                description: "处理后数据表格的参数勾选，targetId必须为0"
+              - value: 2
+                name: "处理后数据曲线"
+                description: "处理后数据曲线的参数勾选，targetId必须为0"
+              - value: 3
+                name: "数据可视化表格"
+                description: "数据可视化表格的参数勾选，targetId为对应组件的widgetId"
+              - value: 4
+                name: "数据可视化曲线"
+                description: "数据可视化曲线的参数勾选，targetId为对应组件的widgetId"
         - name: targetId
           in: query
           required: true
-          description: 固定页面为0；数据可视化页面为组件主键
+          description: "勾选目标主键：selectionType为1或2时必须填0；为3或4时填写当前任务、当前用户的对应组件widgetId，3对应实时数据组件，4对应实时曲线组件。不同组件分别保存勾选。"
           schema: { type: integer, format: int64 }
         - name: deviceSatelliteId
           in: query
@@ -2966,6 +3272,7 @@ paths:
     post:
       tags: [数据处理]
       summary: 即时保存遥测参数勾选状态
+      description: "勾选或取消时立即保存，按taskId、selectionType、targetId隔离。设备卫星主键和遥测代号由parseRuleId对应的有效参数解析配置确定，无需单独提交；取消勾选采用逻辑删除。筛选树与后续数据查询必须使用相同的场景和目标。"
       requestBody:
         required: true
         content:
@@ -2974,11 +3281,37 @@ paths:
               type: object
               required: [taskId, parseRuleId, checked, selectionType, targetId]
               properties:
-                taskId: { type: string }
-                parseRuleId: { type: integer, format: int64 }
-                checked: { type: boolean }
-                selectionType: { type: integer, enum: [1, 2, 3, 4] }
-                targetId: { type: integer, format: int64 }
+                taskId:
+                  type: string
+                  description: "当前试验任务编号，参数必须属于该任务。"
+                parseRuleId:
+                  type: integer
+                  format: int64
+                  description: "参数解析配置主键，使用筛选树中遥测参数节点的id；不是设备卫星ID、所属系统ID或遥测代号。"
+                checked:
+                  type: boolean
+                  description: "勾选状态：true表示勾选，false表示取消勾选；只有遥测参数节点可以勾选。"
+                selectionType:
+                  type: integer
+                  description: "勾选场景：1处理后数据表格，2处理后数据曲线，3数据可视化表格，4数据可视化曲线。各场景的参数勾选分别保存。"
+                  enum: [1, 2, 3, 4]
+                  x-apifox-enum:
+                    - value: 1
+                      name: "处理后数据表格"
+                      description: "处理后数据表格的参数勾选，targetId必须为0"
+                    - value: 2
+                      name: "处理后数据曲线"
+                      description: "处理后数据曲线的参数勾选，targetId必须为0"
+                    - value: 3
+                      name: "数据可视化表格"
+                      description: "数据可视化表格的参数勾选，targetId为对应组件的widgetId"
+                    - value: 4
+                      name: "数据可视化曲线"
+                      description: "数据可视化曲线的参数勾选，targetId为对应组件的widgetId"
+                targetId:
+                  type: integer
+                  format: int64
+                  description: "勾选目标主键：selectionType为1或2时必须填0；为3或4时填写当前任务、当前用户的对应组件widgetId，3对应实时数据组件，4对应实时曲线组件。不是设备卫星ID或参数解析配置ID。"
             example: { taskId: TASK-20260908-001, parseRuleId: 81, checked: true, selectionType: 3, targetId: 205 }
       responses:
         '200':
@@ -3057,38 +3390,6 @@ paths:
                       bitWidth: '32'
                       telemetryName: 电压
                       telemetryCode: TMK1001
-  /processing/logs:
-    get:
-      tags: [数据处理]
-      summary: 分页查询数据处理日志
-      parameters:
-        - $ref: '#/components/parameters/TaskId'
-        - name: processTaskId
-          description: "数据处理任务 ID"
-          in: query
-          schema: { type: integer, format: int64 }
-        - name: logLevel
-          description: "处理日志级别。枚举：1 信息，2 警告，3 错误"
-          in: query
-          schema:
-            type: integer
-            enum: [1, 2, 3]
-            x-apifox-enum:
-              - value: 1
-                name: "信息"
-                description: "1 表示信息日志"
-              - value: 2
-                name: "警告"
-                description: "2 表示警告日志"
-              - value: 3
-                name: "错误"
-                description: "3 表示错误日志"
-        - $ref: '#/components/parameters/PageNum'
-        - $ref: '#/components/parameters/PageSize20'
-      responses:
-        '200':
-          $ref: '#/components/responses/Success056'
-
   /processing/rules/batch-update:
     post:
       tags: [数据处理]
@@ -3283,37 +3584,13 @@ paths:
                 channelName:
                   type: string
                   description: "校准通道名称"
-                channelType:
-                  type: integer
-                  description: "通道类型：1 温度，2 电压，3 电流，4 功率，5 姿态传感器。枚举：1 温度传感器，2 电压传感器，3 电流传感器，4 功率传感器，5 姿态传感器"
-                  enum:
-                    - 1
-                    - 2
-                    - 3
-                    - 4
-                    - 5
-                  x-apifox-enum:
-                    - value: 1
-                      name: "温度传感器"
-                      description: "1 表示温度传感器"
-                    - value: 2
-                      name: "电压传感器"
-                      description: "2 表示电压传感器"
-                    - value: 3
-                      name: "电流传感器"
-                      description: "3 表示电流传感器"
-                    - value: 4
-                      name: "功率传感器"
-                      description: "4 表示功率传感器"
-                    - value: 5
-                      name: "姿态传感器"
-                      description: "5 表示姿态传感器"
                 calibrationFormula:
                   type: string
                   description: "校准公式"
                 normalRange:
+                  nullable: true
                   type: string
-                  description: "通道正常数值范围"
+                  description: "正常数值范围，仅阈值法必填；其他算法可不填，填写时校验格式；修改时不传保留原值，非阈值法传空字符串可清空"
                 detectMethod:
                   type: integer
                   description: "野值检测方法：1莱特准则 2阈值法 3肖维涅法。枚举：1 莱特准则，2 阈值法，3 肖维涅法"
@@ -3410,7 +3687,6 @@ paths:
             example:
               taskId: "TASK-20260908-001"
               channelName: "温度通道1"
-              channelType: 1
               calibrationFormula: "CH01"
               normalRange: "-20~80"
               detectMethod: 3
@@ -3449,37 +3725,13 @@ paths:
                 channelName:
                   type: string
                   description: "校准通道名称"
-                channelType:
-                  type: integer
-                  description: "通道类型：1 温度，2 电压，3 电流，4 功率，5 姿态传感器。枚举：1 温度传感器，2 电压传感器，3 电流传感器，4 功率传感器，5 姿态传感器"
-                  enum:
-                    - 1
-                    - 2
-                    - 3
-                    - 4
-                    - 5
-                  x-apifox-enum:
-                    - value: 1
-                      name: "温度传感器"
-                      description: "1 表示温度传感器"
-                    - value: 2
-                      name: "电压传感器"
-                      description: "2 表示电压传感器"
-                    - value: 3
-                      name: "电流传感器"
-                      description: "3 表示电流传感器"
-                    - value: 4
-                      name: "功率传感器"
-                      description: "4 表示功率传感器"
-                    - value: 5
-                      name: "姿态传感器"
-                      description: "5 表示姿态传感器"
                 calibrationFormula:
                   type: string
                   description: "校准公式"
                 normalRange:
+                  nullable: true
                   type: string
-                  description: "通道正常数值范围"
+                  description: "正常数值范围，仅阈值法必填；其他算法可不填，填写时校验格式；修改时不传保留原值，非阈值法传空字符串可清空"
                 detectMethod:
                   type: integer
                   description: "野值检测方法：1莱特准则 2阈值法 3肖维涅法。枚举：1 莱特准则，2 阈值法，3 肖维涅法"
@@ -3577,7 +3829,6 @@ paths:
               id: 91
               taskId: "TASK-20260908-001"
               channelName: "温度通道1"
-              channelType: 1
               calibrationFormula: "CH01"
               normalRange: "-30~90"
               detectMethod: 3
@@ -3643,65 +3894,71 @@ paths:
 
   /alarms/data:
     get:
-      tags: [告警管理]
+      tags:
+      - 告警管理
       summary: 查询数据监测告警
-      description: 支持来源、关键字、级别、状态和告警时间范围组合筛选。关键字匹配来源、告警信息、任务名称、通道编码和触发规则。
+      description: 告警由后台采集、处理、校准自动录入，不提供人工创建、内容修改和删除接口，支持人工修改处理状态。支持来源、关键字、级别、状态和告警时间范围组合筛选。关键字匹配来源、告警信息、任务名称、通道编码和触发规则。 来源参数使用sourceCode英文编码，中文来源名称通过sourceName返回；来源中文关键字仍可使用keyword匹配。
       parameters:
-        - $ref: '#/components/parameters/TaskId'
-        - name: sourceName
-          in: query
-          description: "告警来源，精确匹配"
-          schema: { type: string }
-        - name: keyword
-          in: query
-          description: "关键字，模糊匹配来源、告警信息、任务名称、通道编码和触发规则"
-          schema: { type: string }
-        - name: alarmLevel
-          in: query
-          description: "告警级别：1提示 2一般 3轻微 4严重 5紧急"
-          schema: { type: integer, enum: [1, 2, 3, 4, 5] }
-        - name: alarmStatus
-          in: query
-          description: "处理状态：0未处理 1已处理"
-          schema: { type: integer, enum: [0, 1] }
-        - name: startTime
-          in: query
-          description: "告警开始时间，包含该时间"
-          schema: { type: string, format: date-time }
-        - name: endTime
-          in: query
-          description: "告警结束时间，包含该时间"
-          schema: { type: string, format: date-time }
-        - $ref: '#/components/parameters/PageNum'
-        - $ref: '#/components/parameters/PageSize20'
+      - $ref: '#/components/parameters/TaskId'
+      - name: sourceCode
+        in: query
+        description: 来源英文编码，使用/alarms/findData中dataAlarmSource的value精确匹配；不接受中文名称
+        schema:
+          type: string
+          enum:
+          - COLLECTION
+          - PROCESSING
+          - CALIBRATION
+          x-apifox-enum:
+          - value: COLLECTION
+            label: 数据采集
+          - value: PROCESSING
+            label: 数据处理
+          - value: CALIBRATION
+            label: 数据校准
+      - name: keyword
+        in: query
+        description: 关键字，模糊匹配来源、告警信息、任务名称、通道编码和触发规则
+        schema:
+          type: string
+      - name: alarmLevel
+        in: query
+        description: 数据监测告警级别：2一般、4严重
+        schema:
+          type: integer
+          enum:
+          - 2
+          - 4
+          x-apifox-enum:
+          - value: 2
+            label: 一般
+          - value: 4
+            label: 严重
+      - name: alarmStatus
+        in: query
+        description: 处理状态：0未处理 1已处理
+        schema:
+          type: integer
+          enum:
+          - 0
+          - 1
+      - name: startTime
+        in: query
+        description: 告警开始时间，包含该时间
+        schema:
+          type: string
+          format: date-time
+      - name: endTime
+        in: query
+        description: 告警结束时间，包含该时间
+        schema:
+          type: string
+          format: date-time
+      - $ref: '#/components/parameters/PageNum'
+      - $ref: '#/components/parameters/PageSize20'
       responses:
         '200':
           $ref: '#/components/responses/Success073'
-
-  /alarms/data/sources:
-    get:
-      tags: [告警管理]
-      summary: 查询数据监测告警来源选项
-      description: 返回指定试验任务下未删除告警的非空来源，已去重并按名称排序。
-      parameters:
-        - $ref: '#/components/parameters/TaskId'
-      responses:
-        '200':
-          description: 操作成功
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  code: { type: integer }
-                  message: { type: string }
-                  data:
-                    type: array
-                    items: { type: string }
-              example:
-                code: 200
-                message: "操作成功"
-                data: ["温度监控", "电压监控", "载荷设备"]
 
   /alarms/data/{id}:
     get:
@@ -3713,205 +3970,11 @@ paths:
         '200':
           $ref: '#/components/responses/Success074'
 
-  /alarms/data/create:
-    post:
-      tags: [告警管理]
-      summary: 新增数据监测告警
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                taskId:
-                  type: string
-                  description: "外部试验任务编号"
-                alarmTime:
-                  type: string
-                  description: "告警触发时间"
-                  format: date-time
-                sourceName:
-                  type: string
-                  description: "告警数据来源名称"
-                alarmMsg:
-                  type: string
-                  description: "数据监测告警内容"
-                alarmLevel:
-                  type: integer
-                  description: "数据监测告警级别。枚举：1 提示，2 一般，3 轻微，4 严重，5 紧急"
-                  enum:
-                    - 1
-                    - 2
-                    - 3
-                    - 4
-                    - 5
-                  x-apifox-enum:
-                    - value: 1
-                      name: "提示"
-                      description: "1 表示提示"
-                    - value: 2
-                      name: "一般"
-                      description: "2 表示一般"
-                    - value: 3
-                      name: "轻微"
-                      description: "3 表示轻微"
-                    - value: 4
-                      name: "严重"
-                      description: "4 表示严重"
-                    - value: 5
-                      name: "紧急"
-                      description: "5 表示紧急"
-                alarmStatus:
-                  type: integer
-                  description: "数据告警处理状态。枚举：0 未处理，1 已处理"
-                  enum:
-                    - 0
-                    - 1
-                  x-apifox-enum:
-                    - value: 0
-                      name: "未处理"
-                      description: "0 表示未处理"
-                    - value: 1
-                      name: "已处理"
-                      description: "1 表示已处理"
-                taskName:
-                  type: string
-                  description: "试验任务或数据处理任务名称"
-                channelCode:
-                  type: string
-                  description: "触发告警的通道编码"
-                triggerRule:
-                  type: string
-                  description: "告警触发规则说明"
-            example:
-              alarmTime: "2026-07-30T15:20:00"
-              sourceName: "遥测接口"
-              alarmMsg: "温度超上限"
-              alarmLevel: 4
-              alarmStatus: 0
-              taskName: "任务A"
-              channelCode: "TEMP_01"
-              triggerRule: "> 80℃"
-      responses:
-        '200':
-          $ref: '#/components/responses/Success075'
-
-  /alarms/data/update:
-    post:
-      tags: [告警管理]
-      summary: 修改数据监测告警
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                id:
-                  type: integer
-                  description: "业务数据主键 ID"
-                  format: int64
-                taskId:
-                  type: string
-                  description: "外部试验任务编号"
-                alarmTime:
-                  type: string
-                  description: "告警触发时间"
-                  format: date-time
-                sourceName:
-                  type: string
-                  description: "告警数据来源名称"
-                alarmMsg:
-                  type: string
-                  description: "数据监测告警内容"
-                alarmLevel:
-                  type: integer
-                  description: "数据监测告警级别。枚举：1 提示，2 一般，3 轻微，4 严重，5 紧急"
-                  enum:
-                    - 1
-                    - 2
-                    - 3
-                    - 4
-                    - 5
-                  x-apifox-enum:
-                    - value: 1
-                      name: "提示"
-                      description: "1 表示提示"
-                    - value: 2
-                      name: "一般"
-                      description: "2 表示一般"
-                    - value: 3
-                      name: "轻微"
-                      description: "3 表示轻微"
-                    - value: 4
-                      name: "严重"
-                      description: "4 表示严重"
-                    - value: 5
-                      name: "紧急"
-                      description: "5 表示紧急"
-                alarmStatus:
-                  type: integer
-                  description: "数据告警处理状态。枚举：0 未处理，1 已处理"
-                  enum:
-                    - 0
-                    - 1
-                  x-apifox-enum:
-                    - value: 0
-                      name: "未处理"
-                      description: "0 表示未处理"
-                    - value: 1
-                      name: "已处理"
-                      description: "1 表示已处理"
-                taskName:
-                  type: string
-                  description: "试验任务或数据处理任务名称"
-                channelCode:
-                  type: string
-                  description: "触发告警的通道编码"
-                triggerRule:
-                  type: string
-                  description: "告警触发规则说明"
-            example:
-              id: 131
-              taskId: "TASK-20260908-001"
-              alarmTime: "2026-07-30T15:20:00"
-              sourceName: "遥测接口"
-              alarmMsg: "温度持续超上限"
-              alarmLevel: 5
-              alarmStatus: 0
-              taskName: "任务A"
-              channelCode: "TEMP_01"
-              triggerRule: "> 80℃"
-      responses:
-        '200':
-          $ref: '#/components/responses/Success076'
-
-  /alarms/data/delete:
-    post:
-      tags: [告警管理]
-      summary: 删除数据监测告警
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                id:
-                  type: integer
-                  description: "业务数据主键 ID"
-                  format: int64
-            example:
-              id: 131
-      responses:
-        '200':
-          $ref: '#/components/responses/Success077'
-
   /alarms/data/status:
     post:
       tags: [告警管理]
-      summary: 修改数据监测告警状态
+      summary: 修改数据监测告警人工处理状态
+      description: 人工处理状态为0未处理、1已处理；只改变alarmStatus，不改变告警内容或后台自动恢复时间recoverTime。该操作记录到系统操作日志。
       requestBody:
         required: true
         content:
@@ -3925,17 +3988,17 @@ paths:
                   format: int64
                 status:
                   type: integer
-                  description: "启用状态。枚举：0 停用，1 启用"
+                  description: "人工处理状态。枚举：0 未处理，1 已处理"
                   enum:
                     - 0
                     - 1
                   x-apifox-enum:
                     - value: 0
-                      name: "停用"
-                      description: "0 表示停用"
+                      name: "未处理"
+                      description: "0 表示未处理"
                     - value: 1
-                      name: "启用"
-                      description: "1 表示启用"
+                      name: "已处理"
+                      description: "1 表示已处理"
             example:
               id: 131
               status: 1
@@ -3945,11 +4008,29 @@ paths:
 
   /alarms/system:
     get:
-      tags: [告警管理]
+      tags:
+      - 告警管理
       summary: 查询系统告警
       responses:
         '200':
           $ref: '#/components/responses/Success079'
+      description: 唯一系统告警查询入口，后台自动写入sys_alarm_event；不开放创建、修改、删除或人工恢复接口。
+      parameters:
+      - name: status
+        in: query
+        required: false
+        description: 自动恢复状态，为空返回全部
+        schema:
+          type: integer
+          description: 恢复状态
+          enum:
+          - 0
+          - 1
+          x-apifox-enum:
+          - value: 0
+            label: 未恢复
+          - value: 1
+            label: 已恢复
 
   /alarms/system-monitor/current:
     get:
@@ -3972,277 +4053,94 @@ paths:
         '200':
           $ref: '#/components/responses/Success081'
 
-  /alarms/system-monitor/events:
-    get:
-      tags: [告警管理]
-      summary: 查询系统健康告警事件
-      parameters:
-        - name: status
-          description: "告警状态筛选条件。枚举：0 未恢复，1 已恢复"
-          in: query
-          schema:
-            type: integer
-            enum: [0, 1]
-            x-apifox-enum:
-              - value: 0
-                name: "未恢复"
-                description: "0 表示告警尚未恢复"
-              - value: 1
-                name: "已恢复"
-                description: "1 表示告警已经恢复"
-      responses:
-        '200':
-          $ref: '#/components/responses/Success082'
-
-  /alarms/system/{id}:
-    get:
-      tags: [告警管理]
-      summary: 查询系统告警详情
-      parameters:
-        - $ref: '#/components/parameters/Id'
-      responses:
-        '200':
-          $ref: '#/components/responses/Success083'
-
-  /alarms/system/create:
-    post:
-      tags: [告警管理]
-      summary: 新增系统告警
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                alarmTime:
-                  type: string
-                  description: "告警触发时间"
-                  format: date-time
-                objName:
-                  type: string
-                  description: "发生告警的系统对象名称"
-                alarmType:
-                  type: string
-                  description: "系统告警类型"
-                alarmContent:
-                  type: string
-                  description: "告警详细内容"
-                alarmLevel:
-                  type: integer
-                  description: "系统告警级别。枚举：1 提示，2 一般，3 严重"
-                  enum:
-                    - 1
-                    - 2
-                    - 3
-                  x-apifox-enum:
-                    - value: 1
-                      name: "提示"
-                      description: "1 表示提示"
-                    - value: 2
-                      name: "一般"
-                      description: "2 表示一般"
-                    - value: 3
-                      name: "严重"
-                      description: "3 表示严重"
-                alarmStatus:
-                  type: integer
-                  description: "系统告警恢复状态。枚举：0 未恢复，1 已恢复"
-                  enum:
-                    - 0
-                    - 1
-                  x-apifox-enum:
-                    - value: 0
-                      name: "未恢复"
-                      description: "0 表示未恢复"
-                    - value: 1
-                      name: "已恢复"
-                      description: "1 表示已恢复"
-            example:
-              alarmTime: "2026-07-30T15:20:00"
-              objName: "数据库"
-              alarmType: "连接异常"
-              alarmContent: "数据库连接延迟过高"
-              alarmLevel: 2
-              alarmStatus: 0
-      responses:
-        '200':
-          $ref: '#/components/responses/Success084'
-
-  /alarms/system/update:
-    post:
-      tags: [告警管理]
-      summary: 修改系统告警
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                id:
-                  type: integer
-                  description: "业务数据主键 ID"
-                  format: int64
-                alarmTime:
-                  type: string
-                  description: "告警触发时间"
-                  format: date-time
-                objName:
-                  type: string
-                  description: "发生告警的系统对象名称"
-                alarmType:
-                  type: string
-                  description: "系统告警类型"
-                alarmContent:
-                  type: string
-                  description: "告警详细内容"
-                alarmLevel:
-                  type: integer
-                  description: "系统告警级别。枚举：1 提示，2 一般，3 严重"
-                  enum:
-                    - 1
-                    - 2
-                    - 3
-                  x-apifox-enum:
-                    - value: 1
-                      name: "提示"
-                      description: "1 表示提示"
-                    - value: 2
-                      name: "一般"
-                      description: "2 表示一般"
-                    - value: 3
-                      name: "严重"
-                      description: "3 表示严重"
-                alarmStatus:
-                  type: integer
-                  description: "系统告警恢复状态。枚举：0 未恢复，1 已恢复"
-                  enum:
-                    - 0
-                    - 1
-                  x-apifox-enum:
-                    - value: 0
-                      name: "未恢复"
-                      description: "0 表示未恢复"
-                    - value: 1
-                      name: "已恢复"
-                      description: "1 表示已恢复"
-            example:
-              id: 141
-              alarmTime: "2026-07-30T15:20:00"
-              objName: "数据库"
-              alarmType: "连接异常"
-              alarmContent: "数据库连接超时"
-              alarmLevel: 3
-              alarmStatus: 0
-      responses:
-        '200':
-          $ref: '#/components/responses/Success085'
-
-  /alarms/system/delete:
-    post:
-      tags: [告警管理]
-      summary: 删除系统告警
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                id:
-                  type: integer
-                  description: "业务数据主键 ID"
-                  format: int64
-            example:
-              id: 141
-      responses:
-        '200':
-          $ref: '#/components/responses/Success086'
-
-  /alarms/system/status:
-    post:
-      tags: [告警管理]
-      summary: 修改系统告警状态
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                id:
-                  type: integer
-                  description: "业务数据主键 ID"
-                  format: int64
-                status:
-                  type: integer
-                  description: "启用状态。枚举：0 停用，1 启用"
-                  enum:
-                    - 0
-                    - 1
-                  x-apifox-enum:
-                    - value: 0
-                      name: "停用"
-                      description: "0 表示停用"
-                    - value: 1
-                      name: "启用"
-                      description: "1 表示启用"
-            example:
-              id: 141
-              status: 1
-      responses:
-        '200':
-          $ref: '#/components/responses/Success087'
-
   /system/logs:
     get:
-      tags: [系统日志]
+      tags:
+      - 系统日志
       summary: 组合筛选并分页查询系统运行日志
-      description: 日志级别枚举为DEBUG调试、INFO信息、WARN警告、ERROR错误。操作人、日志内容和详情支持模糊匹配，时间范围包含起止时间。
+      description: 日志级别枚举为INFO信息、WARN警告、ERROR错误。操作人、日志内容和详情支持模糊匹配，时间范围包含起止时间。
       parameters:
-        - $ref: '#/components/parameters/TaskId'
-        - name: logLevel
-          in: query
-          description: "日志级别：DEBUG调试 INFO信息 WARN警告 ERROR错误"
-          schema:
-            type: string
-            enum: [DEBUG, INFO, WARN, ERROR]
-            x-apifox-enum:
-              - value: DEBUG
-                name: "调试"
-                description: "DEBUG表示调试日志"
-              - value: INFO
-                name: "信息"
-                description: "INFO表示普通运行信息"
-              - value: WARN
-                name: "警告"
-                description: "WARN表示运行警告"
-              - value: ERROR
-                name: "错误"
-                description: "ERROR表示运行错误"
-        - name: logSource
-          in: query
-          description: "日志来源，精确匹配"
-          schema: { type: string }
-        - name: operatorId
-          in: query
-          description: "操作人标识，模糊匹配"
-          schema: { type: string }
-        - name: keyword
-          in: query
-          description: "关键字，模糊匹配日志内容和详情"
-          schema: { type: string }
-        - name: startTime
-          in: query
-          description: "开始时间，包含该时间"
-          schema: { type: string, format: date-time }
-        - name: endTime
-          in: query
-          description: "结束时间，包含该时间"
-          schema: { type: string, format: date-time }
-        - $ref: '#/components/parameters/PageNum'
-        - $ref: '#/components/parameters/PageSize20'
+      - $ref: '#/components/parameters/TaskId'
+      - name: logLevel
+        in: query
+        description: 日志级别：INFO信息 WARN警告 ERROR错误
+        schema:
+          type: string
+          enum:
+          - INFO
+          - WARN
+          - ERROR
+          x-apifox-enum:
+          - value: INFO
+            name: 信息
+            description: INFO表示普通运行信息
+          - value: WARN
+            name: 警告
+            description: WARN表示运行警告
+          - value: ERROR
+            name: 错误
+            description: ERROR表示运行错误
+      - name: logSource
+        in: query
+        description: 日志来源英文编码，使用/system/logs/findData中logSource的value精确匹配；不接受中文名称
+        schema:
+          type: string
+          enum:
+          - COLLECTION
+          - PROCESSING
+          - CALIBRATION
+          - VISUALIZATION
+          - TELEMETRY_FILTER
+          - ALARM_MANAGEMENT
+          - USER_MANAGEMENT
+          - ROLE_MANAGEMENT
+          - SATELLITE_CATALOG
+          - AUTHENTICATION
+          x-apifox-enum: &id001
+          - value: COLLECTION
+            label: 数据采集
+          - value: PROCESSING
+            label: 数据处理
+          - value: CALIBRATION
+            label: 数据校准
+          - value: VISUALIZATION
+            label: 数据可视化
+          - value: TELEMETRY_FILTER
+            label: 遥测参数筛选
+          - value: ALARM_MANAGEMENT
+            label: 告警管理
+          - value: USER_MANAGEMENT
+            label: 用户管理
+          - value: ROLE_MANAGEMENT
+            label: 角色管理
+          - value: SATELLITE_CATALOG
+            label: 卫星目录
+          - value: AUTHENTICATION
+            label: 用户认证
+      - name: operatorId
+        in: query
+        description: 操作人标识，模糊匹配
+        schema:
+          type: string
+      - name: keyword
+        in: query
+        description: 关键字，模糊匹配日志内容和详情
+        schema:
+          type: string
+      - name: startTime
+        in: query
+        description: 开始时间，包含该时间
+        schema:
+          type: string
+          format: date-time
+      - name: endTime
+        in: query
+        description: 结束时间，包含该时间
+        schema:
+          type: string
+          format: date-time
+      - $ref: '#/components/parameters/PageNum'
+      - $ref: '#/components/parameters/PageSize20'
       responses:
         '200':
           description: 操作成功
@@ -4251,82 +4149,97 @@ paths:
               schema:
                 type: object
                 properties:
-                  code: { type: integer }
-                  message: { type: string }
+                  code:
+                    type: integer
+                  message:
+                    type: string
                   data:
                     type: object
                     properties:
-                      pageNum: { type: integer }
-                      pageSize: { type: integer }
-                      total: { type: integer, format: int64 }
+                      pageNum:
+                        type: integer
+                      pageSize:
+                        type: integer
+                      total:
+                        type: integer
+                        format: int64
                       records:
                         type: array
                         items:
                           type: object
                           properties:
-                            id: { type: integer, format: int64 }
-                            taskId: { type: string }
-                            logTime: { type: string, format: date-time }
+                            id:
+                              type: integer
+                              format: int64
+                            taskId:
+                              type: string
+                            logTime:
+                              type: string
+                              format: date-time
                             logLevel:
                               type: string
-                              enum: [DEBUG, INFO, WARN, ERROR]
-                              description: "日志级别：DEBUG调试 INFO信息 WARN警告 ERROR错误"
+                              enum:
+                              - INFO
+                              - WARN
+                              - ERROR
+                              description: 日志级别：INFO信息 WARN警告 ERROR错误
                             logLevelName:
                               type: string
-                              description: "日志级别中文名称：调试、信息、警告或错误"
-                            logSource: { type: string, description: "日志来源" }
-                            operatorId: { type: string, description: "操作人标识" }
-                            logContent: { type: string, description: "日志内容" }
-                            logDetail: { type: string, description: "日志完整详情" }
+                              description: 日志级别中文名称：信息、警告或错误
+                            logSource:
+                              type: string
+                              description: 日志来源英文编码
+                              enum:
+                              - COLLECTION
+                              - PROCESSING
+                              - CALIBRATION
+                              - VISUALIZATION
+                              - TELEMETRY_FILTER
+                              - ALARM_MANAGEMENT
+                              - USER_MANAGEMENT
+                              - ROLE_MANAGEMENT
+                              - SATELLITE_CATALOG
+                              - AUTHENTICATION
+                              x-apifox-enum: *id001
+                            operatorId:
+                              type: string
+                              description: 操作人标识
+                            logContent:
+                              type: string
+                              description: 日志内容
+                            logDetail:
+                              type: string
+                              description: 日志完整详情
+                            logSourceName:
+                              type: string
+                              nullable: true
+                              description: 来源中文名称，由日志来源枚举的label生成，仅用于展示
               example:
                 code: 200
-                message: "操作成功"
+                message: 操作成功
                 data:
                   pageNum: 1
                   pageSize: 20
                   total: 1
                   records:
-                    - id: 201
-                      taskId: "TASK-20260908-001"
-                      logTime: "2026-08-06T14:39:14"
-                      logLevel: "ERROR"
-                      logLevelName: "错误"
-                      logSource: "ProtocolParser"
-                      operatorId: "admin"
-                      logContent: "任务执行异常退出"
-                      logDetail: "[ProtocolParser]任务执行异常退出 - traceId=lhwykl0v"
-
-  /system/logs/sources:
-    get:
-      tags: [系统日志]
-      summary: 查询系统日志来源选项
-      description: 返回指定试验任务下非空日志来源，已去重并按名称排序。
-      parameters:
-        - $ref: '#/components/parameters/TaskId'
-      responses:
-        '200':
-          description: 操作成功
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  code: { type: integer }
-                  message: { type: string }
-                  data:
-                    type: array
-                    items: { type: string }
-              example:
-                code: 200
-                message: "操作成功"
-                data: ["AgentManager", "DataCollector", "ProtocolParser", "StorageService"]
+                  - id: 201
+                    taskId: TASK-20260908-001
+                    logTime: '2026-08-06T14:39:14'
+                    logLevel: ERROR
+                    logLevelName: 错误
+                    logSource: COLLECTION
+                    operatorId: admin
+                    logContent: 创建采集接口失败
+                    logDetail: 操作人：admin；接口名称：遥测接收接口；接口ID：101；结果：创建失败；原因：后台异常
+                    logSourceName: 数据采集
 
   /system/logs/{id}:
     get:
-      tags: [系统日志]
+      tags:
+      - 系统日志
       summary: 查询系统运行日志详情
       parameters:
-        - $ref: '#/components/parameters/Id'
+      - $ref: '#/components/parameters/Id'
       responses:
         '200':
           description: 操作成功
@@ -4335,38 +4248,93 @@ paths:
               schema:
                 type: object
                 properties:
-                  code: { type: integer }
-                  message: { type: string }
+                  code:
+                    type: integer
+                  message:
+                    type: string
                   data:
                     type: object
                     properties:
-                      id: { type: integer, format: int64 }
-                      taskId: { type: string }
-                      logTime: { type: string, format: date-time }
+                      id:
+                        type: integer
+                        format: int64
+                      taskId:
+                        type: string
+                      logTime:
+                        type: string
+                        format: date-time
                       logLevel:
                         type: string
-                        enum: [DEBUG, INFO, WARN, ERROR]
-                        description: "日志级别：DEBUG调试 INFO信息 WARN警告 ERROR错误"
+                        enum:
+                        - INFO
+                        - WARN
+                        - ERROR
+                        description: 日志级别：INFO信息 WARN警告 ERROR错误
                       logLevelName:
                         type: string
-                        description: "日志级别中文名称：调试、信息、警告或错误"
-                      logSource: { type: string, description: "日志来源" }
-                      operatorId: { type: string, description: "操作人标识" }
-                      logContent: { type: string, description: "日志内容" }
-                      logDetail: { type: string, description: "日志完整详情" }
+                        description: 日志级别中文名称：信息、警告或错误
+                      logSource:
+                        type: string
+                        description: 日志来源英文编码
+                        enum:
+                        - COLLECTION
+                        - PROCESSING
+                        - CALIBRATION
+                        - VISUALIZATION
+                        - TELEMETRY_FILTER
+                        - ALARM_MANAGEMENT
+                        - USER_MANAGEMENT
+                        - ROLE_MANAGEMENT
+                        - SATELLITE_CATALOG
+                        - AUTHENTICATION
+                        x-apifox-enum:
+                        - value: COLLECTION
+                          label: 数据采集
+                        - value: PROCESSING
+                          label: 数据处理
+                        - value: CALIBRATION
+                          label: 数据校准
+                        - value: VISUALIZATION
+                          label: 数据可视化
+                        - value: TELEMETRY_FILTER
+                          label: 遥测参数筛选
+                        - value: ALARM_MANAGEMENT
+                          label: 告警管理
+                        - value: USER_MANAGEMENT
+                          label: 用户管理
+                        - value: ROLE_MANAGEMENT
+                          label: 角色管理
+                        - value: SATELLITE_CATALOG
+                          label: 卫星目录
+                        - value: AUTHENTICATION
+                          label: 用户认证
+                      operatorId:
+                        type: string
+                        description: 操作人标识
+                      logContent:
+                        type: string
+                        description: 日志内容
+                      logDetail:
+                        type: string
+                        description: 日志完整详情
+                      logSourceName:
+                        type: string
+                        nullable: true
+                        description: 来源中文名称，由日志来源枚举的label生成，仅用于展示
               example:
                 code: 200
-                message: "操作成功"
+                message: 操作成功
                 data:
                   id: 201
-                  taskId: "TASK-20260908-001"
-                  logTime: "2026-08-06T14:39:14"
-                  logLevel: "ERROR"
-                  logLevelName: "错误"
-                  logSource: "ProtocolParser"
-                  operatorId: "admin"
-                  logContent: "任务执行异常退出"
-                  logDetail: "[ProtocolParser]任务执行异常退出 - traceId=lhwykl0v"
+                  taskId: TASK-20260908-001
+                  logTime: '2026-08-06T14:39:14'
+                  logLevel: ERROR
+                  logLevelName: 错误
+                  logSource: COLLECTION
+                  operatorId: admin
+                  logContent: 创建采集接口失败
+                  logDetail: 操作人：admin；接口名称：遥测接收接口；接口ID：101；结果：创建失败；原因：后台异常
+                  logSourceName: 数据采集
 
   /satellite-management/findData:
     get:
@@ -4606,6 +4574,568 @@ components:
       bearerFormat: JWT
 
   schemas:
+    VisualizationConfigFile:
+      type: object
+      additionalProperties: false
+      description: 可视化页面配置文件；复用现有枚举编码并附中文名称，全部关联使用业务标识，不携带用户、组件、设备或解析配置主键
+      required: [schemaVersion, widgets]
+      properties:
+        schemaVersion:
+          type: integer
+          enum: [1]
+          description: 文件结构版本，目前仅支持第一版
+          example: 1
+        exportedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: 导出时间，带时区偏移；导入只检查格式，不用于业务匹配
+          example: '2026-10-13T09:00:00+08:00'
+        widgets:
+          type: array
+          maxItems: 500
+          description: 全部组件，包含隐藏组件；必须显式提供，空数组表示空页面
+          items: {$ref: '#/components/schemas/VisualizationConfigWidget'}
+    VisualizationConfigWidget:
+      type: object
+      additionalProperties: false
+      required: [widgetKey, widgetType, gridX, gridY, gridWidth, gridHeight, enabled]
+      properties:
+        widgetKey: {type: string, maxLength: 64, description: 用户任务范围内唯一组件标识, example: temperature-table}
+        widgetType:
+          type: integer
+          description: 复用组件类型枚举编码
+          enum: [1, 2, 3, 4, 5]
+          x-apifox-enum:
+            - {value: 1, label: 实时曲线}
+            - {value: 2, label: 实时数据}
+            - {value: 3, label: 实时告警}
+            - {value: 4, label: 载荷图像}
+            - {value: 5, label: 文件表格}
+        widgetTypeName: {type: string, readOnly: true, description: 组件类型中文名称，仅展示，导入忽略, example: 实时数据}
+        widgetTitle: {type: string, maxLength: 100, nullable: true, description: 组件显示标题, example: 温度表格}
+        gridX: {type: integer, minimum: 0, description: 左上角横向网格坐标, example: 0}
+        gridY: {type: integer, minimum: 0, description: 左上角纵向网格坐标, example: 0}
+        gridWidth: {type: integer, minimum: 1, description: 占用网格列数，沿用现有网格单位, example: 6}
+        gridHeight: {type: integer, minimum: 1, description: 占用网格行数，沿用现有网格单位, example: 4}
+        enabled:
+          type: integer
+          description: 显示状态，复用现有枚举
+          enum: [0, 1]
+          x-apifox-enum:
+            - {value: 0, label: 隐藏}
+            - {value: 1, label: 显示}
+        enabledName: {type: string, readOnly: true, description: 显示状态中文名称，仅展示，导入忽略, example: 显示}
+        items:
+          type: array
+          description: 非遥测数据项，保留各自勾选状态；省略时为空数组，不接受null
+          items: {$ref: '#/components/schemas/VisualizationConfigItem'}
+        selectedParameters:
+          type: array
+          description: 仅包含此组件已经勾选的遥测参数；只允许实时曲线及实时数据组件使用，组件内按完整业务标识去重；省略时为空数组，不接受null
+          items: {$ref: '#/components/schemas/VisualizationConfigParameter'}
+    VisualizationConfigParameter:
+      type: object
+      additionalProperties: false
+      required: [deviceType, deviceCode, telemetryCode]
+      properties:
+        deviceType:
+          type: string
+          description: 复用设备卫星类型枚举，与设备编码及遥测代号共同匹配
+          enum: ['1', '2']
+          x-apifox-enum:
+            - {value: '1', label: 卫星}
+            - {value: '2', label: 设备}
+        deviceTypeName: {type: string, readOnly: true, description: 类型中文名称，仅展示，导入忽略, example: 卫星}
+        deviceCode: {type: string, maxLength: 100, description: 设备卫星编码，匹配目标任务内同类型有效设备, example: 卫星A}
+        deviceName: {type: string, nullable: true, description: 导出时的设备名称，供核对，不作为匹配条件, example: 卫星A}
+        telemetryCode: {type: string, maxLength: 100, description: 设备内唯一的遥测代号, example: T001}
+        telemetryName: {type: string, nullable: true, description: 导出时的遥测名称，供核对，不作为匹配条件, example: 温度}
+        systemPath: {type: string, nullable: true, description: 导出时的所属系统完整路径，供核对，不作为匹配条件, example: 热控系统}
+        dataItems:
+          type: array
+          description: 此已勾选参数已有的数据项配置，selected必须为true；直接通过筛选树勾选时可以为空数组；省略时为空数组，不接受null
+          items: {$ref: '#/components/schemas/VisualizationConfigItem'}
+    VisualizationConfigItem:
+      type: object
+      additionalProperties: false
+      required: [itemCode, itemName, selected]
+      properties:
+        itemCode: {type: string, maxLength: 100, description: 已持久化数据项代号, example: T001}
+        itemName: {type: string, maxLength: 100, description: 已持久化数据项名称, example: 温度}
+        selected: {type: boolean, description: 非遥测数据项保留原状态；已勾选参数下固定为true, example: true}
+        interfaceName: {type: string, maxLength: 100, nullable: true, description: 可选采集接口名称；目标任务内必须恰好匹配一条有效记录，省略表示无关联}
+        protocolConfigName: {type: string, maxLength: 100, nullable: true, description: 可选协议配置名称；目标任务内必须恰好匹配一条有效记录，省略表示无关联}
+    VisualizationConfigPreview:
+      type: object
+      description: 导入检查及导入成功统计；导入成功时valid为true、errors为空，existingWidgetCount为本次被替换的原组件数量
+      required: [valid, widgetCount, parameterCount, itemCount, existingWidgetCount, errors]
+      properties:
+        valid: {type: boolean, description: 是否检查通过；检查通过后实际导入仍重新校验, example: true}
+        widgetCount: {type: integer, description: 文件组件数量, example: 1}
+        parameterCount: {type: integer, description: 参数勾选总数；同一参数在不同组件分别计数, example: 1}
+        itemCount: {type: integer, description: 已持久化数据项数量，不为筛选树勾选额外创建数据项, example: 0}
+        existingWidgetCount: {type: integer, description: 当前用户目标任务内将被替换或已经被替换的原组件数量, example: 2}
+        errors:
+          type: array
+          maxItems: 100
+          description: 最多一百条中文问题；非空时禁止导入，结构错误时可能不执行后续关联匹配
+          items: {type: string}
+    SystemAlarmEvent:
+      type: object
+      description: 统一系统告警，保留sys_alarm_event全部原字段并补充实时监测字段
+      properties:
+        id:
+          type: integer
+          description: 主键ID
+          format: int64
+        alarmTime:
+          type: string
+          description: 首次告警时间
+          format: date-time
+          nullable: true
+        objName:
+          type: string
+          description: 系统对象名称
+        alarmType:
+          type: string
+          description: 系统告警类型英文编码，复用监测指标枚举
+          enum:
+          - cpu_usage
+          - memory_usage
+          - disk_usage
+          - queue_depth
+          x-apifox-enum:
+          - value: cpu_usage
+            label: CPU使用率
+          - value: memory_usage
+            label: 内存使用率
+          - value: disk_usage
+            label: 磁盘使用率
+          - value: queue_depth
+            label: 消息积压数量
+        alarmContent:
+          type: string
+          description: 告警内容
+        isDeleted:
+          type: integer
+          description: 逻辑删除标志
+        createTime:
+          type: string
+          description: 创建时间
+          format: date-time
+          nullable: true
+        updateTime:
+          type: string
+          description: 更新时间
+          format: date-time
+          nullable: true
+        firstAlarmTime:
+          type: string
+          description: 首次触发时间
+          format: date-time
+          nullable: true
+        lastAlarmTime:
+          type: string
+          description: 最近异常时间
+          format: date-time
+          nullable: true
+        recoverTime:
+          type: string
+          description: 自动恢复时间
+          format: date-time
+          nullable: true
+        triggerCount:
+          type: integer
+          description: 触发次数
+        alarmLevel:
+          type: integer
+          description: 系统告警级别
+          enum:
+          - 2
+          - 3
+          x-apifox-enum:
+          - value: 2
+            label: 一般
+          - value: 3
+            label: 严重
+        alarmLevelName:
+          type: string
+          description: 级别中文名称
+        alarmStatus:
+          type: integer
+          description: 自动恢复状态
+          enum:
+          - 0
+          - 1
+          x-apifox-enum:
+          - value: 0
+            label: 未恢复
+          - value: 1
+            label: 已恢复
+        alarmStatusName:
+          type: string
+          description: 恢复状态中文名称
+        metricCode:
+          type: string
+          description: 监测指标编码
+          enum:
+          - cpu_usage
+          - memory_usage
+          - disk_usage
+          - queue_depth
+          x-apifox-enum:
+          - value: cpu_usage
+            label: CPU使用率
+          - value: memory_usage
+            label: 内存使用率
+          - value: disk_usage
+            label: 磁盘使用率
+          - value: queue_depth
+            label: 消息积压数量
+        metricName:
+          type: string
+          description: 监测指标中文名称
+        currentValue:
+          type: number
+          description: 当前指标值
+          nullable: true
+        thresholdValue:
+          type: number
+          description: 触发阈值
+          nullable: true
+        alarmTypeName:
+          type: string
+          nullable: true
+          description: 告警类型中文名称，由监测指标枚举的label生成
+
+    DataAlarmEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: 告警ID
+          nullable: false
+          format: int64
+        taskId:
+          type: string
+          description: 试验任务编号
+          nullable: true
+        alarmTime:
+          type: string
+          description: 首次告警时间
+          nullable: false
+          format: date-time
+        sourceName:
+          type: string
+          nullable: true
+          description: 来源中文名称，由来源枚举的label生成，仅用于展示
+        alarmMsg:
+          type: string
+          description: 中文摘要，包含接口名称、ID、参数及异常原因
+          nullable: false
+        taskName:
+          type: string
+          description: 任务名称快照
+          nullable: true
+        channelCode:
+          type: string
+          description: 通道编码
+          nullable: true
+        triggerRule:
+          type: string
+          description: 触发规则
+          nullable: true
+        isDeleted:
+          type: integer
+          description: 逻辑删除标志
+          nullable: true
+        createTime:
+          type: string
+          description: 创建时间
+          nullable: true
+          format: date-time
+        updateTime:
+          type: string
+          description: 更新时间
+          nullable: true
+          format: date-time
+        interfaceId:
+          type: integer
+          description: 采集接口ID
+          nullable: true
+          format: int64
+        processTaskId:
+          type: integer
+          description: 处理任务ID，无法确定时为空
+          nullable: true
+          format: int64
+        calibChannelId:
+          type: integer
+          description: 校准通道ID
+          nullable: true
+          format: int64
+        tmSymbol:
+          type: string
+          description: 遥测参数代号
+          nullable: true
+        parameterName:
+          type: string
+          description: 参数名称快照
+          nullable: true
+        alarmDetail:
+          type: string
+          description: 完整中文详情，含接口地址、协议、参数、规则、数值和影响
+          nullable: true
+        triggerCount:
+          type: integer
+          description: 累计触发次数
+          nullable: true
+        lastTriggerTime:
+          type: string
+          description: 最近触发时间
+          nullable: true
+          format: date-time
+        recoverTime:
+          type: string
+          description: 自动恢复时间，独立于人工处理状态
+          nullable: true
+          format: date-time
+        alarmLevel:
+          type: integer
+          description: 数据告警级别
+          enum:
+          - 2
+          - 4
+          x-apifox-enum:
+          - value: 2
+            label: 一般
+          - value: 4
+            label: 严重
+        alarmLevelName:
+          type: string
+          description: 级别中文名称
+        alarmStatus:
+          type: integer
+          description: 人工处理状态
+          enum:
+          - 0
+          - 1
+          x-apifox-enum:
+          - value: 0
+            label: 未处理
+          - value: 1
+            label: 已处理
+        alarmStatusName:
+          type: string
+          description: 人工处理状态中文名称
+        eventType:
+          type: string
+          description: 自动事件类型编码
+          enum:
+          - INTERFACE_SYNC
+          - INTERFACE_START
+          - INTERFACE_STOP
+          - COLLECTION_RECEIVE
+          - PACKET_PARSE
+          - FILE_RECEIVE
+          - PROCESS_QUEUE
+          - PROCESS_CONFIG
+          - RPC_FAILURE
+          - PARAMETER_RANGE
+          - STORAGE_FAILURE
+          - MESSAGE_FAILURE
+          - FILE_RESULT
+          - CALIBRATION_OUTLIER
+          - CALIBRATION_RULE
+          - CALIBRATION_CACHE
+          - CALIBRATION_PERSIST
+          x-apifox-enum:
+          - value: INTERFACE_SYNC
+            label: 采集运行状态同步失败
+          - value: INTERFACE_START
+            label: 接口启动失败
+          - value: INTERFACE_STOP
+            label: 采集接口停止接收
+          - value: COLLECTION_RECEIVE
+            label: 接口接收异常
+          - value: PACKET_PARSE
+            label: 报文解析失败
+          - value: FILE_RECEIVE
+            label: 文件接收失败
+          - value: PROCESS_QUEUE
+            label: 处理队列已满
+          - value: PROCESS_CONFIG
+            label: 参数处理失败
+          - value: RPC_FAILURE
+            label: 远程处理失败
+          - value: PARAMETER_RANGE
+            label: 遥测参数越限
+          - value: STORAGE_FAILURE
+            label: 数据存储失败
+          - value: MESSAGE_FAILURE
+            label: 结果消息发送失败
+          - value: FILE_RESULT
+            label: 文件结果处理失败
+          - value: CALIBRATION_OUTLIER
+            label: 校准野值
+          - value: CALIBRATION_RULE
+            label: 校准规则异常
+          - value: CALIBRATION_CACHE
+            label: 校准缓存失败
+          - value: CALIBRATION_PERSIST
+            label: 校准记录落库失败
+        eventTypeName:
+          type: string
+          description: 自动事件中文名称
+        sourceCode:
+          type: string
+          description: 来源英文编码，对应数据库来源列和接口筛选值
+          enum:
+          - COLLECTION
+          - PROCESSING
+          - CALIBRATION
+          x-apifox-enum:
+          - value: COLLECTION
+            label: 数据采集
+          - value: PROCESSING
+            label: 数据处理
+          - value: CALIBRATION
+            label: 数据校准
+
+    SystemMonitorSnapshot:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: 快照ID
+          nullable: true
+        sampleTime:
+          type: string
+          description: 采样时间
+          nullable: false
+          format: date-time
+        uptimeSeconds:
+          type: integer
+          description: 管理服务当前JVM运行时长，单位秒
+          nullable: false
+        onlineNodeCount:
+          type: integer
+          description: 全量未删除采集接口中已启用数量，启用不代表网络连接在线
+          nullable: false
+        totalNodeCount:
+          type: integer
+          description: 全量未删除采集接口数量
+          nullable: false
+        databaseLatencyMs:
+          type: integer
+          description: 数据库检测耗时，单位毫秒
+          nullable: true
+        messageQueueDepth:
+          type: integer
+          description: 原消息积压查询值，本次不调整消费积压逻辑
+          nullable: true
+        lastHeartbeatTime:
+          type: string
+          description: 原处理服务心跳上报时间，尚无上报时为空
+          nullable: true
+          format: date-time
+        cpuUsagePercent:
+          type: number
+          description: 管理服务所在机器CPU使用率，百分比
+          nullable: false
+        memoryUsagePercent:
+          type: number
+          description: 管理服务所在机器内存使用率，百分比
+          nullable: false
+        diskUsagePercent:
+          type: number
+          description: 管理服务所在机器磁盘使用率，百分比
+          nullable: false
+        healthScore:
+          type: integer
+          description: 现有资源健康评分，0至100
+          nullable: false
+        createTime:
+          type: string
+          description: 创建时间
+          nullable: true
+          format: date-time
+        serviceStatus:
+          type: string
+          description: 注册中心data-process-service健康实例状态
+          enum:
+          - RUNNING
+          - DOWN
+          - ERROR
+          x-apifox-enum:
+          - value: RUNNING
+            label: 运行中
+          - value: DOWN
+            label: 停止
+          - value: ERROR
+            label: 查询异常
+        serviceStatusName:
+          type: string
+          description: 服务状态中文名称
+        heartbeatStatus:
+          type: string
+          description: 处理服务定时写入Redis心跳后判定的状态；默认最近15秒有心跳为NORMAL，否则为WAITING；多实例表示至少一个实例存活。
+          enum:
+          - NORMAL
+          - WAITING
+          x-apifox-enum:
+          - value: NORMAL
+            label: 正常
+          - value: WAITING
+            label: 等待心跳
+        heartbeatStatusName:
+          type: string
+          description: 心跳状态中文名称
+
+    SystemMonitorPush:
+      type: object
+      description: 订阅/topic/system-monitor，告警对象与GET /alarms/system一致
+      properties:
+        snapshot:
+          $ref: '#/components/schemas/SystemMonitorSnapshot'
+        alarmEvents:
+          type: array
+          items:
+            type: object
+            properties:
+              changeType:
+                type: string
+                description: 变化类型
+                enum:
+                - CREATED
+                - UPDATED
+                - RECOVERED
+                x-apifox-enum:
+                - value: CREATED
+                  label: 新增
+                - value: UPDATED
+                  label: 持续触发
+                - value: RECOVERED
+                  label: 已恢复
+              changeTypeName:
+                type: string
+                description: 变化类型中文名称
+              alarmEvent:
+                $ref: '#/components/schemas/SystemAlarmEvent'
+
+    EnumOption:
+      type: object
+      properties:
+        value:
+          description: 枚举编码，级别和状态为整数
+          oneOf:
+          - type: string
+          - type: integer
+        label:
+          type: string
+          description: 中文名称
+
     ProcessingRuleConfigResponse:
       type: object
       properties:
@@ -4714,12 +5244,11 @@ components:
               interfaceRateKbps: { type: number, format: double, description: "该发送方所有接口最新流量之和，单位KB/s" }
               statusName:
                 type: string
-                description: "发送方接口聚合状态中文名称"
-                enum: [离线, 在线, 异常]
+                description: "发送方存在启用接口时在线，全部禁用时离线"
+                enum: [离线, 在线]
                 x-apifox-enum:
                   - { value: "离线", name: "离线", description: "发送方接口当前离线" }
                   - { value: "在线", name: "在线", description: "发送方接口当前在线" }
-                  - { value: "异常", name: "异常", description: "发送方接口存在异常或状态不一致" }
 
     DashboardProcessingData:
       type: object
@@ -4747,7 +5276,7 @@ components:
           description: "数据处理汇总卡片"
           properties:
             unhandledAlarmCount: { type: integer, format: int64, description: "当前未处理告警数量" }
-            processedCount: { type: integer, format: int64, description: "统计时间范围内成功处理的数据总条数" }
+            processedCount: { type: integer, format: int64, description: "统计时间范围内处理完成的数据总条数；PDXP以业务处理完成且两个异步结果任务均提交成功为准，不代表外部写入成功" }
             abnormalCount: { type: integer, format: int64, description: "统计时间范围内判定为野值的遥测参数总数" }
         lineChart:
           type: object
@@ -4766,7 +5295,7 @@ components:
                   systemName: { type: string, description: "发送方系统名称" }
                   values:
                     type: array
-                    description: "各时间点内累计的成功处理条数"
+                    description: "各时间点内累计的处理条数；PDXP以业务处理完成且两个异步结果任务均提交成功为准"
                     items: { type: integer, format: int64 }
         table:
           type: array
@@ -4775,7 +5304,7 @@ components:
             type: object
             properties:
               systemName: { type: string, description: "发送方系统名称" }
-              processedCount: { type: integer, format: int64, description: "统计时间范围内成功处理的数据条数" }
+              processedCount: { type: integer, format: int64, description: "统计时间范围内处理完成的数据条数；PDXP以业务处理完成且两个异步结果任务均提交成功为准" }
               deduplicatedCount: { type: integer, format: int64, description: "统计时间范围内被后值覆盖的重复遥测参数数量" }
               abnormalCount: { type: integer, format: int64, description: "统计时间范围内判定为野值的遥测参数数量" }
 
@@ -4918,6 +5447,32 @@ components:
         maximum: 200
 
   responses:
+    VisualizationConfigCheckSuccess:
+      description: 检查结果或导入成功统计；检查接口必须同时判断data.valid
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              code: {type: integer, description: 业务状态码, example: 200}
+              message: {type: string, description: 中文结果提示, example: 操作成功}
+              data: {$ref: '#/components/schemas/VisualizationConfigPreview'}
+          examples:
+            passed:
+              summary: 检查通过或导入成功
+              value: {code: 200, message: 操作成功, data: {valid: true, widgetCount: 1, parameterCount: 1, itemCount: 0, existingWidgetCount: 2, errors: []}}
+            missingParameter:
+              summary: 目标任务缺少参数，检查未通过
+              value:
+                code: 200
+                message: 操作成功
+                data:
+                  valid: false
+                  widgetCount: 1
+                  parameterCount: 1
+                  itemCount: 0
+                  existingWidgetCount: 2
+                  errors: ['参数匹配失败：卫星／卫星A／T001']
     DashboardCollectionSuccess:
       description: 操作成功
       content:
@@ -6154,8 +6709,8 @@ components:
                               description: "3 表示HTTP"
                         transferProtocol:
                           type: integer
-                          description: "传输协议：1JSON 2PDXP 3Protobuf 4FEP"
-                          enum: [1, 2, 3, 4]
+                          description: "传输协议：1JSON 2PDXP 3FEP"
+                          enum: [1, 2, 3]
                           x-apifox-enum:
                             - value: 1
                               name: "JSON"
@@ -6164,11 +6719,8 @@ components:
                               name: "PDXP"
                               description: "2 表示PDXP"
                             - value: 3
-                              name: "Protobuf"
-                              description: "3 表示Protobuf"
-                            - value: 4
                               name: "FEP"
-                              description: "4 表示FEP"
+                              description: "3 表示FEP"
                         transferProtocolName:
                           type: string
                           description: "传输协议名称"
@@ -6188,11 +6740,11 @@ components:
                           description: "UDP组播地址；填写时按组播接收，为空时按单播接收"
                         status:
                           type: integer
-                          description: "采集接口运行状态。枚举：0 离线，1 在线，2 异常"
+                          readOnly: true
+                          description: "由enabled决定的在线状态：0离线（禁用），1在线（启用）"
                           enum:
                             - 0
                             - 1
-                            - 2
                           x-apifox-enum:
                             - value: 0
                               name: "离线"
@@ -6200,9 +6752,12 @@ components:
                             - value: 1
                               name: "在线"
                               description: "1 表示在线"
-                            - value: 2
-                              name: "异常"
-                              description: "2 表示异常"
+
+                        statusName:
+                          type: string
+                          readOnly: true
+                          description: "由enabled决定的中文在线状态"
+                          enum: [离线, 在线]
                         enabled:
                           type: integer
                           description: "是否启用通道：0否 1是。枚举：0 禁用，1 启用"
@@ -6227,7 +6782,12 @@ components:
                           description: "是否启用RPC处理中文名称"
                         dataPacketCount:
                           type: integer
-                          description: "累计接收的数据包数量"
+                          format: int64
+                          description: "按任务和接口汇总统计表的累计采集量，包含已归档窗口；PDXP为完整帧数，FEP为完整文件数，无统计时为0"
+                        interfaceRateKbps:
+                          type: number
+                          format: double
+                          description: "Redis最新采集速率，单位KB/s，最多两位小数；缓存有效期5秒，缺失或Redis不可用时为0"
                         remark:
                           type: string
                           description: "备注信息"
@@ -6253,10 +6813,12 @@ components:
                   port: 9001
                   multicastIp: "239.1.1.1"
                   status: 1
+                  statusName: "在线"
                   enabled: 1
                   rpcEnabled: 1
                   rpcEnabledName: "是"
                   dataPacketCount: 25600
+                  interfaceRateKbps: 128.5
                   remark: "主链路"
 
     Success023:
@@ -6324,8 +6886,8 @@ components:
                         description: "3 表示HTTP"
                   transferProtocol:
                     type: integer
-                    description: "传输协议：1JSON 2PDXP 3Protobuf 4FEP"
-                    enum: [1, 2, 3, 4]
+                    description: "传输协议：1JSON 2PDXP 3FEP"
+                    enum: [1, 2, 3]
                     x-apifox-enum:
                       - value: 1
                         name: "JSON"
@@ -6334,11 +6896,8 @@ components:
                         name: "PDXP"
                         description: "2 表示PDXP"
                       - value: 3
-                        name: "Protobuf"
-                        description: "3 表示Protobuf"
-                      - value: 4
                         name: "FEP"
-                        description: "4 表示FEP"
+                        description: "3 表示FEP"
                   transferProtocolName:
                     type: string
                     description: "传输协议名称"
@@ -6362,11 +6921,11 @@ components:
                     description: "UDP组播地址；填写时按组播接收，为空时按单播接收"
                   status:
                     type: integer
-                    description: "采集接口运行状态。枚举：0 离线，1 在线，2 异常"
+                    readOnly: true
+                    description: "由enabled决定的在线状态：0离线（禁用），1在线（启用）"
                     enum:
                       - 0
                       - 1
-                      - 2
                     x-apifox-enum:
                       - value: 0
                         name: "离线"
@@ -6374,9 +6933,12 @@ components:
                       - value: 1
                         name: "在线"
                         description: "1 表示在线"
-                      - value: 2
-                        name: "异常"
-                        description: "2 表示异常"
+
+                  statusName:
+                    type: string
+                    readOnly: true
+                    description: "由enabled决定的中文在线状态"
+                    enum: [离线, 在线]
                   enabled:
                     type: integer
                     description: "是否启用通道：0否 1是。枚举：0 禁用，1 启用"
@@ -6424,6 +6986,7 @@ components:
               port: 9001
               multicastIp: "239.1.1.1"
               status: 1
+              statusName: "在线"
               enabled: 1
               rpcEnabled: 1
               rpcEnabledName: "是"
@@ -6877,121 +7440,6 @@ components:
           example:
             code: 200
             message: "操作成功"
-
-    Success034:
-      description: 操作成功
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              code:
-                type: integer
-                description: "业务状态码，200 表示操作成功"
-              message:
-                type: string
-                description: "业务处理结果提示信息"
-              data:
-                type: object
-                description: "接口返回的业务数据"
-                properties:
-                  infoTotal:
-                    type: integer
-                    description: "信息级事件数量"
-                  warningTotal:
-                    type: integer
-                    description: "警告级事件数量"
-                  errorTotal:
-                    type: integer
-                    description: "错误级事件数量"
-                  criticalTotal:
-                    type: integer
-                    description: "严重级事件数量"
-          example:
-            code: 200
-            message: "操作成功"
-            data:
-              infoTotal: 120
-              warningTotal: 8
-              errorTotal: 2
-              criticalTotal: 1
-
-    Success035:
-      description: 操作成功
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              code:
-                type: integer
-                description: "业务状态码，200 表示操作成功"
-              message:
-                type: string
-                description: "业务处理结果提示信息"
-              data:
-                type: array
-                description: "接口返回的业务数据"
-                items:
-                  type: object
-                  properties:
-                    id:
-                      type: integer
-                      description: "业务数据主键 ID"
-                      format: int64
-                    logTime:
-                      type: string
-                      description: "日志实际发生时间"
-                      format: date-time
-                    logLevel:
-                      type: string
-                      description: "日志级别。枚举：DEBUG 调试，INFO 信息，WARN 警告，ERROR 错误"
-                      enum:
-                        - "DEBUG"
-                        - "INFO"
-                        - "WARN"
-                        - "ERROR"
-                    logLevelName:
-                      type: string
-                      description: "日志级别中文名称：调试、信息、警告或错误"
-                      x-apifox-enum:
-                        - value: "DEBUG"
-                          name: "调试"
-                          description: "DEBUG 表示调试"
-                        - value: "INFO"
-                          name: "信息"
-                          description: "INFO 表示信息"
-                        - value: "WARN"
-                          name: "警告"
-                          description: "WARN 表示警告"
-                        - value: "ERROR"
-                          name: "错误"
-                          description: "ERROR 表示错误"
-                    logSource:
-                      type: string
-                      description: "日志来源模块"
-                    operatorId:
-                      type: string
-                      description: "日志操作人或系统标识"
-                    logContent:
-                      type: string
-                      description: "日志内容"
-                    logDetail:
-                      type: string
-                      description: "日志详细信息"
-          example:
-            code: 200
-            message: "操作成功"
-            data:
-              - id: 31
-                taskId: "TASK-20260908-001"
-                logTime: "2026-07-30T15:20:00"
-                logLevel: "INFO"
-                logLevelName: "信息"
-                logSource: "采集服务"
-                operatorId: "system"
-                logContent: "接口连接成功"
-                logDetail: "192.168.1.10:9001"
 
     Success036:
       description: 操作成功
@@ -7478,7 +7926,7 @@ components:
                 properties:
                   todayProcessedCount:
                     type: integer
-                    description: "今日成功处理的数据数量"
+                    description: "今日处理完成的数据数量；PDXP以业务处理完成且两个异步结果任务均提交成功为准"
                   deduplicatedCount:
                     type: integer
                     description: "当前任务全部历史累计去重数量"
@@ -7508,20 +7956,20 @@ components:
                 properties:
                   processRate:
                     type: string
-                    description: "当前任务所有接口上一秒的PDXP处理速率，值中包含条/秒单位"
+                    description: "当前任务所有接口的PDXP帧处理速率之和，按业务处理完成且两个异步结果任务均提交成功的帧数除以实际采样秒数计算，不代表外部写入成功，最多保留两位小数，值中包含条/秒单位"
                   cpuUsage:
                     type: string
-                    description: "数据处理服务进程CPU使用率，值中包含百分号"
+                    description: "管理服务所在机器整体CPU使用率，与系统告警同口径，值中包含百分号"
                   memoryUsage:
                     type: string
-                    description: "数据处理服务JVM已使用内存，值中包含GB单位"
+                    description: "管理服务所在机器物理内存使用率，与系统告警同口径，保留两位小数，值中包含百分号；无有效指标时为0.00%"
           example:
             code: 200
             message: "操作成功"
             data:
               processRate: "2400 条/秒"
               cpuUsage: "36.50%"
-              memoryUsage: "0.50 GB"
+              memoryUsage: "23.50%"
 
     EnabledCollectInterfaceOptions:
       description: 操作成功
@@ -7710,97 +8158,6 @@ components:
                 times: [1790236800500]
                 values: [41.2]
 
-    Success056:
-      description: 操作成功
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              code:
-                type: integer
-                description: "业务状态码，200 表示操作成功"
-              message:
-                type: string
-                description: "业务处理结果提示信息"
-              data:
-                type: object
-                description: "接口返回的业务数据"
-                properties:
-                  pageNum:
-                    type: integer
-                    description: "当前页码，从 1 开始"
-                  pageSize:
-                    type: integer
-                    description: "每页记录数量，最大 100 条"
-                  total:
-                    type: integer
-                    description: "符合查询条件的记录总数"
-                  records:
-                    type: array
-                    description: "当前页数据列表"
-                    items:
-                      type: object
-                      properties:
-                        id:
-                          type: integer
-                          description: "业务数据主键 ID"
-                          format: int64
-                        taskId:
-                          type: string
-                          description: "外部试验任务编号"
-                        processTaskId:
-                          type: integer
-                          description: "数据处理任务 ID"
-                          format: int64
-                        logTime:
-                          type: string
-                          description: "日志实际发生时间"
-                          format: date-time
-                        logLevel:
-                          type: integer
-                          description: "日志级别。枚举：1 信息，2 警告，3 错误"
-                          enum:
-                            - 1
-                            - 2
-                            - 3
-                        logLevelName:
-                          type: string
-                          description: "日志级别中文名称：信息、警告或错误"
-                          x-apifox-enum:
-                            - value: 1
-                              name: "信息"
-                              description: "1 表示信息"
-                            - value: 2
-                              name: "警告"
-                              description: "2 表示警告"
-                            - value: 3
-                              name: "错误"
-                              description: "3 表示错误"
-                        logContent:
-                          type: string
-                          description: "日志内容"
-                        createTime:
-                          type: string
-                          description: "记录创建时间"
-                          format: date-time
-          example:
-            code: 200
-            message: "操作成功"
-            data:
-              pageNum: 1
-              pageSize: 20
-              total: 1
-              records:
-                - id: 71
-                  taskId: "TASK-20260908-001"
-                  processTaskId: 61
-                  logTime: "2026-07-30T15:20:00"
-                  logLevel: 1
-                  logLevelName: "信息"
-                  logContent: "批次处理完成"
-                  createTime: "2026-07-30T15:20:01"
-
     Success060:
       description: 操作成功
       content:
@@ -7847,37 +8204,13 @@ components:
                     channelName:
                       type: string
                       description: "校准通道名称"
-                    channelType:
-                      type: integer
-                      description: "通道类型：1 温度，2 电压，3 电流，4 功率，5 姿态传感器。枚举：1 温度传感器，2 电压传感器，3 电流传感器，4 功率传感器，5 姿态传感器"
-                      enum:
-                        - 1
-                        - 2
-                        - 3
-                        - 4
-                        - 5
-                      x-apifox-enum:
-                        - value: 1
-                          name: "温度传感器"
-                          description: "1 表示温度传感器"
-                        - value: 2
-                          name: "电压传感器"
-                          description: "2 表示电压传感器"
-                        - value: 3
-                          name: "电流传感器"
-                          description: "3 表示电流传感器"
-                        - value: 4
-                          name: "功率传感器"
-                          description: "4 表示功率传感器"
-                        - value: 5
-                          name: "姿态传感器"
-                          description: "5 表示姿态传感器"
                     calibrationFormula:
                       type: string
                       description: "校准公式"
                     normalRange:
+                      nullable: true
                       type: string
-                      description: "通道正常数值范围"
+                      description: "正常数值范围，仅阈值法必填；其他算法可不填，填写时校验格式；修改时不传保留原值，非阈值法传空字符串可清空"
                     detectMethod:
                       type: integer
                       description: "野值检测方法：1莱特准则 2阈值法 3肖维涅法。枚举：1 莱特准则，2 阈值法，3 肖维涅法"
@@ -7971,9 +8304,6 @@ components:
                         - value: 2
                           name: "异常"
                           description: "2 表示异常"
-                    channelTypeName:
-                      type: string
-                      description: "通道类型中文名称"
                     detectMethodName:
                       type: string
                       description: "野值检测方法中文名称"
@@ -7996,8 +8326,6 @@ components:
               - id: 91
                 taskId: "TASK-20260908-001"
                 channelName: "温度通道1"
-                channelType: 1
-                channelTypeName: "温度传感器"
                 calibrationFormula: "CH01"
                 normalRange: "-20~80"
                 detectMethod: 3
@@ -8044,37 +8372,13 @@ components:
                   channelName:
                     type: string
                     description: "校准通道名称"
-                  channelType:
-                    type: integer
-                    description: "通道类型：1 温度，2 电压，3 电流，4 功率，5 姿态传感器。枚举：1 温度传感器，2 电压传感器，3 电流传感器，4 功率传感器，5 姿态传感器"
-                    enum:
-                      - 1
-                      - 2
-                      - 3
-                      - 4
-                      - 5
-                    x-apifox-enum:
-                      - value: 1
-                        name: "温度传感器"
-                        description: "1 表示温度传感器"
-                      - value: 2
-                        name: "电压传感器"
-                        description: "2 表示电压传感器"
-                      - value: 3
-                        name: "电流传感器"
-                        description: "3 表示电流传感器"
-                      - value: 4
-                        name: "功率传感器"
-                        description: "4 表示功率传感器"
-                      - value: 5
-                        name: "姿态传感器"
-                        description: "5 表示姿态传感器"
                   calibrationFormula:
                     type: string
                     description: "校准公式"
                   normalRange:
+                    nullable: true
                     type: string
-                    description: "通道正常数值范围"
+                    description: "正常数值范围，仅阈值法必填；其他算法可不填，填写时校验格式；修改时不传保留原值，非阈值法传空字符串可清空"
                   detectMethod:
                     type: integer
                     description: "野值检测方法：1莱特准则 2阈值法 3肖维涅法。枚举：1 莱特准则，2 阈值法，3 肖维涅法"
@@ -8168,9 +8472,6 @@ components:
                       - value: 2
                         name: "异常"
                         description: "2 表示异常"
-                  channelTypeName:
-                    type: string
-                    description: "通道类型中文名称"
                   detectMethodName:
                     type: string
                     description: "野值检测方法中文名称"
@@ -8193,8 +8494,6 @@ components:
               id: 91
               taskId: "TASK-20260908-001"
               channelName: "温度通道1"
-              channelType: 1
-              channelTypeName: "温度传感器"
               calibrationFormula: "CH01"
               normalRange: "-20~80"
               detectMethod: 3
@@ -8391,111 +8690,56 @@ components:
             properties:
               code:
                 type: integer
-                description: "业务状态码，200 表示操作成功"
+                description: 业务状态码
               message:
                 type: string
-                description: "业务处理结果提示信息"
+                description: 中文结果说明
               data:
                 type: object
-                description: "接口返回的业务数据"
                 properties:
                   pageNum:
                     type: integer
-                    description: "当前页码，从 1 开始"
+                    description: 页码
                   pageSize:
                     type: integer
-                    description: "每页记录数量，最大 100 条"
+                    description: 每页条数
                   total:
                     type: integer
-                    description: "符合查询条件的记录总数"
+                    description: 总数
                   records:
                     type: array
-                    description: "当前页数据列表"
                     items:
-                      type: object
-                      properties:
-                        id:
-                          type: integer
-                          description: "业务数据主键 ID"
-                          format: int64
-                        taskId:
-                          type: string
-                          description: "外部试验任务编号"
-                        alarmTime:
-                          type: string
-                          description: "告警触发时间"
-                          format: date-time
-                        sourceName:
-                          type: string
-                          description: "告警数据来源名称"
-                        alarmMsg:
-                          type: string
-                          description: "数据监测告警内容"
-                        alarmLevel:
-                          type: integer
-                          description: "数据监测告警级别。枚举：1 提示，2 一般，3 轻微，4 严重，5 紧急"
-                          enum:
-                            - 1
-                            - 2
-                            - 3
-                            - 4
-                            - 5
-                          x-apifox-enum:
-                            - value: 1
-                              name: "提示"
-                              description: "1 表示提示"
-                            - value: 2
-                              name: "一般"
-                              description: "2 表示一般"
-                            - value: 3
-                              name: "轻微"
-                              description: "3 表示轻微"
-                            - value: 4
-                              name: "严重"
-                              description: "4 表示严重"
-                            - value: 5
-                              name: "紧急"
-                              description: "5 表示紧急"
-                        alarmStatus:
-                          type: integer
-                          description: "数据告警处理状态。枚举：0 未处理，1 已处理"
-                          enum:
-                            - 0
-                            - 1
-                          x-apifox-enum:
-                            - value: 0
-                              name: "未处理"
-                              description: "0 表示未处理"
-                            - value: 1
-                              name: "已处理"
-                              description: "1 表示已处理"
-                        taskName:
-                          type: string
-                          description: "试验任务或数据处理任务名称"
-                        channelCode:
-                          type: string
-                          description: "触发告警的通道编码"
-                        triggerRule:
-                          type: string
-                          description: "告警触发规则说明"
+                      $ref: '#/components/schemas/DataAlarmEvent'
           example:
             code: 200
-            message: "操作成功"
+            message: 操作成功
             data:
               pageNum: 1
               pageSize: 20
               total: 1
               records:
-                - id: 131
-                  taskId: "TASK-20260908-001"
-                  alarmTime: "2026-07-30T15:20:00"
-                  sourceName: "遥测接口"
-                  alarmMsg: "温度超上限"
-                  alarmLevel: 4
-                  alarmStatus: 0
-                  taskName: "任务A"
-                  channelCode: "TEMP_01"
-                  triggerRule: "> 80℃"
+              - id: 121
+                taskId: TASK-20260908-001
+                alarmTime: '2026-10-09T12:00:00'
+                sourceName: 数据处理
+                eventType: PARAMETER_RANGE
+                eventTypeName: 遥测参数越限
+                alarmMsg: 遥测参数越限；接口：遥测采集（ID：11）；参数：温度（TM001）；判定原码值：120；未命中允许范围
+                alarmLevel: 2
+                alarmLevelName: 一般
+                alarmStatus: 0
+                alarmStatusName: 未处理
+                interfaceId: 11
+                processTaskId: null
+                calibChannelId: null
+                tmSymbol: TM001
+                parameterName: 温度
+                triggerRule: 正常(0~100)
+                alarmDetail: 事件：遥测参数越限；接口：遥测采集（ID：11）；监听地址：127.0.0.1:9001；参数：温度（TM001）；判定原码值：120；规则：正常(0~100)
+                triggerCount: 3
+                lastTriggerTime: '2026-10-09T12:00:10'
+                recoverTime: null
+                sourceCode: PROCESSING
 
     Success074:
       description: 操作成功
@@ -8506,147 +8750,38 @@ components:
             properties:
               code:
                 type: integer
-                description: "业务状态码，200 表示操作成功"
+                description: 业务状态码
               message:
                 type: string
-                description: "业务处理结果提示信息"
+                description: 中文结果说明
               data:
-                type: object
-                description: "接口返回的业务数据"
-                properties:
-                  id:
-                    type: integer
-                    description: "业务数据主键 ID"
-                    format: int64
-                  taskId:
-                    type: string
-                    description: "外部试验任务编号"
-                  alarmTime:
-                    type: string
-                    description: "告警触发时间"
-                    format: date-time
-                  sourceName:
-                    type: string
-                    description: "告警数据来源名称"
-                  alarmMsg:
-                    type: string
-                    description: "数据监测告警内容"
-                  alarmLevel:
-                    type: integer
-                    description: "数据监测告警级别。枚举：1 提示，2 一般，3 轻微，4 严重，5 紧急"
-                    enum:
-                      - 1
-                      - 2
-                      - 3
-                      - 4
-                      - 5
-                    x-apifox-enum:
-                      - value: 1
-                        name: "提示"
-                        description: "1 表示提示"
-                      - value: 2
-                        name: "一般"
-                        description: "2 表示一般"
-                      - value: 3
-                        name: "轻微"
-                        description: "3 表示轻微"
-                      - value: 4
-                        name: "严重"
-                        description: "4 表示严重"
-                      - value: 5
-                        name: "紧急"
-                        description: "5 表示紧急"
-                  alarmStatus:
-                    type: integer
-                    description: "数据告警处理状态。枚举：0 未处理，1 已处理"
-                    enum:
-                      - 0
-                      - 1
-                    x-apifox-enum:
-                      - value: 0
-                        name: "未处理"
-                        description: "0 表示未处理"
-                      - value: 1
-                        name: "已处理"
-                        description: "1 表示已处理"
-                  taskName:
-                    type: string
-                    description: "试验任务或数据处理任务名称"
-                  channelCode:
-                    type: string
-                    description: "触发告警的通道编码"
-                  triggerRule:
-                    type: string
-                    description: "告警触发规则说明"
+                $ref: '#/components/schemas/DataAlarmEvent'
           example:
             code: 200
-            message: "操作成功"
+            message: 操作成功
             data:
-              id: 131
-              taskId: "TASK-20260908-001"
-              alarmTime: "2026-07-30T15:20:00"
-              sourceName: "遥测接口"
-              alarmMsg: "温度超上限"
-              alarmLevel: 4
+              id: 121
+              taskId: TASK-20260908-001
+              alarmTime: '2026-10-09T12:00:00'
+              sourceName: 数据处理
+              eventType: PARAMETER_RANGE
+              eventTypeName: 遥测参数越限
+              alarmMsg: 遥测参数越限；接口：遥测采集（ID：11）；参数：温度（TM001）；判定原码值：120；未命中允许范围
+              alarmLevel: 2
+              alarmLevelName: 一般
               alarmStatus: 0
-              taskName: "任务A"
-              channelCode: "TEMP_01"
-              triggerRule: "> 80℃"
-
-    Success075:
-      description: 操作成功
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              code:
-                type: integer
-                description: "业务状态码，200 表示操作成功"
-              message:
-                type: string
-                description: "业务处理结果提示信息"
-              data:
-                type: integer
-                description: "接口返回的业务数据"
-          example:
-            code: 200
-            message: "操作成功"
-            data: 131
-
-    Success076:
-      description: 操作成功
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              code:
-                type: integer
-                description: "业务状态码，200 表示操作成功"
-              message:
-                type: string
-                description: "业务处理结果提示信息"
-          example:
-            code: 200
-            message: "操作成功"
-
-    Success077:
-      description: 操作成功
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              code:
-                type: integer
-                description: "业务状态码，200 表示操作成功"
-              message:
-                type: string
-                description: "业务处理结果提示信息"
-          example:
-            code: 200
-            message: "操作成功"
+              alarmStatusName: 未处理
+              interfaceId: 11
+              processTaskId: null
+              calibChannelId: null
+              tmSymbol: TM001
+              parameterName: 温度
+              triggerRule: 正常(0~100)
+              alarmDetail: 事件：遥测参数越限；接口：遥测采集（ID：11）；监听地址：127.0.0.1:9001；参数：温度（TM001）；判定原码值：120；规则：正常(0~100)
+              triggerCount: 3
+              lastTriggerTime: '2026-10-09T12:00:10'
+              recoverTime: null
+              sourceCode: PROCESSING
 
     Success078:
       description: 操作成功
@@ -8674,77 +8809,37 @@ components:
             properties:
               code:
                 type: integer
-                description: "业务状态码，200 表示操作成功"
+                description: 业务状态码
               message:
                 type: string
-                description: "业务处理结果提示信息"
+                description: 中文结果说明
               data:
                 type: array
-                description: "接口返回的业务数据"
                 items:
-                  type: object
-                  properties:
-                    id:
-                      type: integer
-                      description: "业务数据主键 ID"
-                      format: int64
-                    taskId:
-                      type: string
-                      description: "外部试验任务编号"
-                    alarmTime:
-                      type: string
-                      description: "告警触发时间"
-                      format: date-time
-                    objName:
-                      type: string
-                      description: "发生告警的系统对象名称"
-                    alarmType:
-                      type: string
-                      description: "系统告警类型"
-                    alarmContent:
-                      type: string
-                      description: "告警详细内容"
-                    alarmLevel:
-                      type: integer
-                      description: "系统告警级别。枚举：1 提示，2 一般，3 严重"
-                      enum:
-                        - 1
-                        - 2
-                        - 3
-                      x-apifox-enum:
-                        - value: 1
-                          name: "提示"
-                          description: "1 表示提示"
-                        - value: 2
-                          name: "一般"
-                          description: "2 表示一般"
-                        - value: 3
-                          name: "严重"
-                          description: "3 表示严重"
-                    alarmStatus:
-                      type: integer
-                      description: "系统告警恢复状态。枚举：0 未恢复，1 已恢复"
-                      enum:
-                        - 0
-                        - 1
-                      x-apifox-enum:
-                        - value: 0
-                          name: "未恢复"
-                          description: "0 表示未恢复"
-                        - value: 1
-                          name: "已恢复"
-                          description: "1 表示已恢复"
+                  $ref: '#/components/schemas/SystemAlarmEvent'
           example:
             code: 200
-            message: "操作成功"
+            message: 操作成功
             data:
-              - id: 141
-                alarmTime: "2026-07-30T15:20:00"
-                objName: "数据库"
-                alarmType: "连接异常"
-                alarmContent: "数据库连接延迟过高"
-                alarmLevel: 2
-                alarmStatus: 0
+            - id: 141
+              alarmTime: '2026-10-09T12:00:00'
+              objName: 计算服务CPU
+              alarmType: cpu_usage
+              alarmContent: CPU使用率为92，持续超过阈值85
+              alarmLevel: 2
+              alarmLevelName: 一般
+              alarmStatus: 0
+              alarmStatusName: 未恢复
+              isDeleted: 0
+              metricCode: cpu_usage
+              metricName: CPU使用率
+              currentValue: 92
+              thresholdValue: 85
+              firstAlarmTime: '2026-10-09T12:00:00'
+              lastAlarmTime: '2026-10-09T12:00:10'
+              recoverTime: null
+              triggerCount: 3
+              alarmTypeName: CPU使用率
 
     Success080:
       description: 操作成功
@@ -8755,104 +8850,31 @@ components:
             properties:
               code:
                 type: integer
-                description: "业务状态码，200 表示操作成功"
+                description: 业务状态码
               message:
                 type: string
-                description: "业务处理结果提示信息"
+                description: 中文结果说明
               data:
-                type: object
-                description: "接口返回的业务数据"
-                properties:
-                  id:
-                    type: integer
-                    description: "业务数据主键 ID"
-                    format: int64
-                  sampleTime:
-                    type: string
-                    description: "数据采样时间"
-                    format: date-time
-                  serviceStatus:
-                    type: string
-                    description: "数据处理服务运行状态。枚举：RUNNING 运行中，DOWN 已停止，ERROR 异常"
-                    enum:
-                      - "RUNNING"
-                      - "DOWN"
-                      - "ERROR"
-                    x-apifox-enum:
-                      - value: "RUNNING"
-                        name: "运行中"
-                        description: "RUNNING 表示运行中"
-                      - value: "DOWN"
-                        name: "已停止"
-                        description: "DOWN 表示已停止"
-                      - value: "ERROR"
-                        name: "异常"
-                        description: "ERROR 表示异常"
-                  uptimeSeconds:
-                    type: integer
-                    description: "服务持续运行时长，单位为秒"
-                  onlineNodeCount:
-                    type: integer
-                    description: "当前在线处理节点数量"
-                  totalNodeCount:
-                    type: integer
-                    description: "处理节点总数量"
-                  databaseLatencyMs:
-                    type: integer
-                    description: "数据库连接检测耗时，单位为毫秒"
-                  messageQueueDepth:
-                    type: integer
-                    description: "RocketMQ数据处理结果消费者组当前积压数量"
-                  heartbeatStatus:
-                    type: string
-                    description: "数据处理服务心跳状态。枚举：NORMAL 正常，WAITING 等待心跳"
-                    enum:
-                      - "NORMAL"
-                      - "WAITING"
-                    x-apifox-enum:
-                      - value: "NORMAL"
-                        name: "正常"
-                        description: "NORMAL 表示正常"
-                      - value: "WAITING"
-                        name: "等待心跳"
-                        description: "WAITING 表示等待心跳"
-                  lastHeartbeatTime:
-                    type: string
-                    description: "最近一次数据处理服务心跳时间"
-                    format: date-time
-                  cpuUsagePercent:
-                    type: number
-                    description: "CPU 使用率，单位为百分比"
-                    format: double
-                  memoryUsagePercent:
-                    type: number
-                    description: "内存使用率，单位为百分比"
-                    format: double
-                  diskUsagePercent:
-                    type: number
-                    description: "磁盘使用率，单位为百分比"
-                    format: double
-                  healthScore:
-                    type: integer
-                    description: "系统综合健康评分，范围 0～100"
+                $ref: '#/components/schemas/SystemMonitorSnapshot'
           example:
             code: 200
-            message: "操作成功"
+            message: 操作成功
             data:
-              id: 111
-              sampleTime: "2026-07-30T15:20:00"
-              serviceStatus: "RUNNING"
+              sampleTime: '2026-10-09T12:00:00'
+              serviceStatus: RUNNING
+              serviceStatusName: 运行中
               uptimeSeconds: 86400
               onlineNodeCount: 3
-              totalNodeCount: 3
+              totalNodeCount: 5
               databaseLatencyMs: 12
-              messageQueueDepth: 8
-              heartbeatStatus: "NORMAL"
-              lastHeartbeatTime: "2026-07-30T15:19:58"
+              messageQueueDepth: null
+              heartbeatStatus: WAITING
+              heartbeatStatusName: 等待心跳
+              lastHeartbeatTime: null
               cpuUsagePercent: 36.5
               memoryUsagePercent: 58.2
               diskUsagePercent: 42.1
-              healthScore: 96
+              healthScore: 42
 
     Success081:
       description: 操作成功
@@ -8863,334 +8885,30 @@ components:
             properties:
               code:
                 type: integer
-                description: "业务状态码，200 表示操作成功"
+                description: 业务状态码
               message:
                 type: string
-                description: "业务处理结果提示信息"
+                description: 中文结果说明
               data:
                 type: array
-                description: "接口返回的业务数据"
                 items:
-                  type: object
-                  properties:
-                    id:
-                      type: integer
-                      description: "业务数据主键 ID"
-                      format: int64
-                    sampleTime:
-                      type: string
-                      description: "数据采样时间"
-                      format: date-time
-                    cpuUsagePercent:
-                      type: number
-                      description: "CPU 使用率，单位为百分比"
-                      format: double
-                    memoryUsagePercent:
-                      type: number
-                      description: "内存使用率，单位为百分比"
-                      format: double
-                    diskUsagePercent:
-                      type: number
-                      description: "磁盘使用率，单位为百分比"
-                      format: double
-                    healthScore:
-                      type: integer
-                      description: "系统综合健康评分，范围 0～100"
+                  $ref: '#/components/schemas/SystemMonitorSnapshot'
           example:
             code: 200
-            message: "操作成功"
+            message: 操作成功
             data:
-              - id: 110
-                sampleTime: "2026-07-30T14:20:00"
-                cpuUsagePercent: 30.1
-                memoryUsagePercent: 55.4
-                diskUsagePercent: 42.0
-                healthScore: 97
-              - id: 111
-                sampleTime: "2026-07-30T15:20:00"
-                cpuUsagePercent: 36.5
-                memoryUsagePercent: 58.2
-                diskUsagePercent: 42.1
-                healthScore: 96
-
-    Success082:
-      description: 操作成功
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              code:
-                type: integer
-                description: "业务状态码，200 表示操作成功"
-              message:
-                type: string
-                description: "业务处理结果提示信息"
-              data:
-                type: array
-                description: "接口返回的业务数据"
-                items:
-                  type: object
-                  properties:
-                    id:
-                      type: integer
-                      description: "业务数据主键 ID"
-                      format: int64
-                    alarmTime:
-                      type: string
-                      description: "告警触发时间"
-                      format: date-time
-                    targetName:
-                      type: string
-                      description: "系统健康告警对象名称"
-                    metricCode:
-                      type: string
-                      description: "触发系统健康告警的指标编码。枚举：cpu_usage CPU 使用率，memory_usage 内存使用率，disk_usage 磁盘使用率，queue_depth 消息队列积压数量"
-                      enum:
-                        - "cpu_usage"
-                        - "memory_usage"
-                        - "disk_usage"
-                        - "queue_depth"
-                      x-apifox-enum:
-                        - value: "cpu_usage"
-                          name: "CPU 使用率"
-                          description: "cpu_usage 表示CPU 使用率"
-                        - value: "memory_usage"
-                          name: "内存使用率"
-                          description: "memory_usage 表示内存使用率"
-                        - value: "disk_usage"
-                          name: "磁盘使用率"
-                          description: "disk_usage 表示磁盘使用率"
-                        - value: "queue_depth"
-                          name: "消息队列积压数量"
-                          description: "queue_depth 表示消息队列积压数量"
-                    alarmLevel:
-                      type: integer
-                      description: "系统告警级别。枚举：1 提示，2 一般，3 严重"
-                      enum:
-                        - 1
-                        - 2
-                        - 3
-                      x-apifox-enum:
-                        - value: 1
-                          name: "提示"
-                          description: "1 表示提示"
-                        - value: 2
-                          name: "一般"
-                          description: "2 表示一般"
-                        - value: 3
-                          name: "严重"
-                          description: "3 表示严重"
-                    alarmContent:
-                      type: string
-                      description: "告警详细内容"
-                    alarmStatus:
-                      type: integer
-                      description: "系统告警恢复状态。枚举：0 未恢复，1 已恢复"
-                      enum:
-                        - 0
-                        - 1
-                      x-apifox-enum:
-                        - value: 0
-                          name: "未恢复"
-                          description: "0 表示未恢复"
-                        - value: 1
-                          name: "已恢复"
-                          description: "1 表示已恢复"
-                    currentValue:
-                      type: number
-                      description: "触发告警时的当前指标值"
-                      format: double
-                    thresholdValue:
-                      type: integer
-                      description: "告警判断阈值"
-                    firstAlarmTime:
-                      type: string
-                      description: "首次触发告警的时间"
-                      format: date-time
-                    lastAlarmTime:
-                      type: string
-                      description: "最近一次检测到异常的时间"
-                      format: date-time
-                    recoverTime:
-                      type: string
-                      format: date-time
-                      nullable: true
-                      description: "告警恢复时间，未恢复时为空"
-                    triggerCount:
-                      type: integer
-                      description: "连续命中告警条件的次数"
-          example:
-            code: 200
-            message: "操作成功"
-            data:
-              - id: 121
-                taskId: "TASK-20260908-001"
-                alarmTime: "2026-07-30T15:10:00"
-                targetName: "处理节点01"
-                metricCode: "cpu_usage"
-                alarmLevel: 2
-                alarmContent: "CPU 使用率超过阈值"
-                alarmStatus: 0
-                currentValue: 91.2
-                thresholdValue: 85
-                firstAlarmTime: "2026-07-30T15:10:00"
-                lastAlarmTime: "2026-07-30T15:18:00"
-                recoverTime: null
-                triggerCount: 3
-
-    Success083:
-      description: 操作成功
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              code:
-                type: integer
-                description: "业务状态码，200 表示操作成功"
-              message:
-                type: string
-                description: "业务处理结果提示信息"
-              data:
-                type: object
-                description: "接口返回的业务数据"
-                properties:
-                  id:
-                    type: integer
-                    description: "业务数据主键 ID"
-                    format: int64
-                  taskId:
-                    type: string
-                    description: "外部试验任务编号"
-                  alarmTime:
-                    type: string
-                    description: "告警触发时间"
-                    format: date-time
-                  objName:
-                    type: string
-                    description: "发生告警的系统对象名称"
-                  alarmType:
-                    type: string
-                    description: "系统告警类型"
-                  alarmContent:
-                    type: string
-                    description: "告警详细内容"
-                  alarmLevel:
-                    type: integer
-                    description: "系统告警级别。枚举：1 提示，2 一般，3 严重"
-                    enum:
-                      - 1
-                      - 2
-                      - 3
-                    x-apifox-enum:
-                      - value: 1
-                        name: "提示"
-                        description: "1 表示提示"
-                      - value: 2
-                        name: "一般"
-                        description: "2 表示一般"
-                      - value: 3
-                        name: "严重"
-                        description: "3 表示严重"
-                  alarmStatus:
-                    type: integer
-                    description: "系统告警恢复状态。枚举：0 未恢复，1 已恢复"
-                    enum:
-                      - 0
-                      - 1
-                    x-apifox-enum:
-                      - value: 0
-                        name: "未恢复"
-                        description: "0 表示未恢复"
-                      - value: 1
-                        name: "已恢复"
-                        description: "1 表示已恢复"
-          example:
-            code: 200
-            message: "操作成功"
-            data:
-              id: 141
-              taskId: "TASK-20260908-001"
-              alarmTime: "2026-07-30T15:20:00"
-              objName: "数据库"
-              alarmType: "连接异常"
-              alarmContent: "数据库连接延迟过高"
-              alarmLevel: 2
-              alarmStatus: 0
-
-    Success084:
-      description: 操作成功
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              code:
-                type: integer
-                description: "业务状态码，200 表示操作成功"
-              message:
-                type: string
-                description: "业务处理结果提示信息"
-              data:
-                type: integer
-                description: "接口返回的业务数据"
-          example:
-            code: 200
-            message: "操作成功"
-            data: 141
-
-    Success085:
-      description: 操作成功
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              code:
-                type: integer
-                description: "业务状态码，200 表示操作成功"
-              message:
-                type: string
-                description: "业务处理结果提示信息"
-          example:
-            code: 200
-            message: "操作成功"
-
-    Success086:
-      description: 操作成功
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              code:
-                type: integer
-                description: "业务状态码，200 表示操作成功"
-              message:
-                type: string
-                description: "业务处理结果提示信息"
-          example:
-            code: 200
-            message: "操作成功"
-
-    Success087:
-      description: 操作成功
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              code:
-                type: integer
-                description: "业务状态码，200 表示操作成功"
-              message:
-                type: string
-                description: "业务处理结果提示信息"
-          example:
-            code: 200
-            message: "操作成功"
-
-
-security:
-  - BearerAuth: []
+            - sampleTime: '2026-10-09T12:00:00'
+              serviceStatus: RUNNING
+              serviceStatusName: 运行中
+              uptimeSeconds: 86400
+              onlineNodeCount: 3
+              totalNodeCount: 5
+              databaseLatencyMs: 12
+              messageQueueDepth: null
+              heartbeatStatus: WAITING
+              heartbeatStatusName: 等待心跳
+              lastHeartbeatTime: null
+              cpuUsagePercent: 36.5
+              memoryUsagePercent: 58.2
+              diskUsagePercent: 42.1
+              healthScore: 42

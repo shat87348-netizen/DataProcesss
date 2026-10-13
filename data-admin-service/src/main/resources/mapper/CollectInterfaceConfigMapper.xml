@@ -62,7 +62,6 @@
         host,
         port,
         multicast_ip,
-        status,
         enabled,
         rpc_enabled,
         data_packet_count,
@@ -84,7 +83,8 @@
             and transfer_type = #{transferType}
         </if>
         <if test="status != null">
-            and status = #{status}
+            <!-- 状态筛选直接使用启用开关，历史状态列不再参与查询。 -->
+            and enabled = #{status}
         </if>
         <if test="enabled != null">
             and enabled = #{enabled}
@@ -115,6 +115,34 @@
         <include refid="queryConditions"/>
         order by id desc
         limit #{pageSize} offset #{offset}
+    </select>
+
+    <!-- 分页完成后批量汇总当前页接口；保留已归档窗口，累计量不随七天清理减少。 -->
+    <select id="findCollectionCounts"
+            resultType="com.example.dataadmin.entity.CollectInterfaceConfig">
+        select
+            task_id,
+            interface_id as id,
+            coalesce(sum(collection_count), 0) as data_packet_count
+        from collect_interface_statistics
+        where 1 = 1
+        <if test="taskId != null and taskId != ''">
+            and task_id = #{taskId}
+        </if>
+        <!-- 空接口列表不扫描统计表，避免越页或全量汇总。 -->
+        <choose>
+            <when test="interfaceIds != null and interfaceIds.size() > 0">
+                and interface_id in
+                <foreach collection="interfaceIds" item="interfaceId"
+                         open="(" separator="," close=")">
+                    #{interfaceId}
+                </foreach>
+            </when>
+            <otherwise>
+                and 1 = 0
+            </otherwise>
+        </choose>
+        group by task_id, interface_id
     </select>
 
     <!-- 统计符合筛选条件的采集接口数量。 -->
@@ -163,6 +191,17 @@
         from collect_interface_config
         where id = #{id}
           and is_deleted = 0
+    </select>
+
+    <!-- 删除协议前查询全部有效绑定，已禁用但未删除的接口同样阻止删除。 -->
+    <select id="findActiveNamesByProtocolConfigId" resultType="string">
+        <!-- 使用函数拼接未命名接口提示，避免数据库把双竖线当作逻辑或。 -->
+        select coalesce(nullif(trim(interface_name), ''),
+                        concat('未命名采集接口（编号：', cast(id as varchar), '）'))
+        from collect_interface_config
+        where protocol_config_id = #{protocolConfigId}
+          and is_deleted = 0
+        order by id
     </select>
 
     <!-- 校验已启用接口的传输方式、监听地址、端口和组播地址是否重复。 -->
@@ -270,9 +309,18 @@
     <update id="updateEnabled">
         update collect_interface_config
         set enabled = #{enabled},
+            <!-- 保留状态列兼容已有表结构，切换开关时同步保存同一编号。 -->
+            status = #{enabled},
             update_time = current_timestamp
         where id = #{id}
           and is_deleted = 0
     </update>
 
+    <!-- 按用户约定，在线数仅统计启用开关，不限定当前试验任务。 -->
+    <select id="findNodeCounts" resultType="com.example.dataadmin.vo.collection.CollectionOverviewVO">
+        select count(id) as interface_total,
+               coalesce(sum(case when enabled = 1 then 1 else 0 end), 0) as online_total
+        from collect_interface_config
+        where is_deleted = 0
+    </select>
 </mapper>

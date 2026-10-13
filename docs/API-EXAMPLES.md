@@ -4,6 +4,8 @@
 
 ## 阅读说明
 
+可视化配置导入导出新增三个接口：`GET /visualization/config/export`、`POST /visualization/config/import/preview`和`POST /visualization/config/import`。导出成功返回JSON附件本身，检查和导入按`multipart/form-data`上传`file`并通过查询参数提供`taskId`，成功结果使用统一响应。完整配置文件、检查结果及前端调用流程见[可视化配置导入导出对接](前端对接-可视化配置导入导出.md)。
+
 除登录接口外，请求都需携带：
 
 ```http
@@ -740,13 +742,14 @@ roleIds=20,21
         "sendFrom": "测控中心", // 数据发送来源
         "messageContent": "实时遥测", // 采集消息内容或格式说明
         "transferType": 1, // 传输方式：1UDP 2TCP 3HTTP。枚举：1 UDP，2 TCP，3 HTTP
-        "transferProtocol": 2, // 传输协议：1 JSON、2 PDXP、3 Protobuf、4 FEP
+        "transferProtocol": 2, // 传输协议：1 JSON、2 PDXP、3 FEP
         "transferProtocolName": "PDXP", // 传输协议名称
         "protocolConfigId": 21, // 本地处理和RPC处理都必须关联协议配置
         "host": "192.168.1.10", // 数据处理服务本机监听网卡IP地址
         "port": 9001, // 数据处理服务本机监听端口
         "multicastIp": "239.1.1.1", // UDP组播地址；为空时按单播接收
-        "status": 1, // 采集接口运行状态。枚举：0 离线，1 在线，2 异常
+        "status": 1, // 由enabled决定的在线状态：0 离线，1 在线
+        "statusName": "在线", // 中文在线状态
         "enabled": 1, // 是否启用通道：0否 1是。枚举：0 禁用，1 启用
         "rpcEnabled": 1, // 是否启用RPC处理：0否 1是
         "rpcEnabledName": "是", // 是否启用RPC处理中文名称
@@ -777,14 +780,15 @@ roleIds=20,21
     "sendFrom": "测控中心", // 数据发送来源
     "messageContent": "实时遥测", // 采集消息内容或格式说明
     "transferType": 1, // 传输方式：1UDP 2TCP 3HTTP。枚举：1 UDP，2 TCP，3 HTTP
-    "transferProtocol": 2, // 传输协议：1 JSON、2 PDXP、3 Protobuf、4 FEP
+    "transferProtocol": 2, // 传输协议：1 JSON、2 PDXP、3 FEP
     "transferProtocolName": "PDXP", // 传输协议名称
     "protocolConfigId": 21, // 本地处理和RPC处理都关联的协议配置
     "protocolConfigName": "遥测RPC协议配置", // 详情展示名称，未关联或协议已删除时为空
     "host": "192.168.1.10", // 数据处理服务本机监听网卡IP地址
     "port": 9001, // 数据处理服务本机监听端口
     "multicastIp": "239.1.1.1", // UDP组播地址；为空时按单播接收
-    "status": 1, // 采集接口运行状态。枚举：0 离线，1 在线，2 异常
+    "status": 1, // 由enabled决定的在线状态：0 离线，1 在线
+    "statusName": "在线", // 中文在线状态
     "enabled": 1, // 是否启用通道：0否 1是。枚举：0 禁用，1 启用
     "rpcEnabled": 1, // 是否启用RPC处理：0否 1是
     "rpcEnabledName": "是", // 是否启用RPC处理中文名称
@@ -806,12 +810,11 @@ roleIds=20,21
   "sendFrom": "测控中心", // 数据发送来源
   "messageContent": "实时遥测", // 采集消息内容或格式说明
   "transferType": 1, // 传输方式：1UDP 2TCP 3HTTP。枚举：1 UDP，2 TCP，3 HTTP
-  "transferProtocol": 2, // 传输协议：1 JSON、2 PDXP、3 Protobuf、4 FEP
+  "transferProtocol": 2, // 传输协议：1 JSON、2 PDXP、3 FEP
   "protocolConfigId": 21, // 本地处理和RPC处理都必须关联协议配置
   "host": "192.168.1.10", // 数据处理服务本机监听网卡IP地址
   "port": 9001, // 数据处理服务本机监听端口
   "multicastIp": "239.1.1.1", // UDP组播地址；为空时按单播接收
-  "status": 0, // 采集接口运行状态。枚举：0 离线，1 在线，2 异常
   "enabled": 1, // 是否启用通道：0否 1是。枚举：0 禁用，1 启用
   "rpcEnabled": 1, // 是否启用RPC处理：0否 1是
   "remark": "主链路" // 备注信息
@@ -841,12 +844,11 @@ roleIds=20,21
   "sendFrom": "测控中心", // 数据发送来源
   "messageContent": "实时遥测", // 采集消息内容或格式说明
   "transferType": 1, // 传输方式：1UDP 2TCP 3HTTP。枚举：1 UDP，2 TCP，3 HTTP
-  "transferProtocol": 2, // 传输协议：1 JSON、2 PDXP、3 Protobuf、4 FEP
+  "transferProtocol": 2, // 传输协议：1 JSON、2 PDXP、3 FEP
   "protocolConfigId": 21, // 本地处理和RPC处理都必须关联协议配置
   "host": "192.168.1.11", // 数据处理服务本机监听网卡IP地址
   "port": 9001, // 数据处理服务本机监听端口
   "multicastIp": "239.1.1.1", // UDP组播地址；为空时按单播接收
-  "status": 1, // 采集接口运行状态。枚举：0 离线，1 在线，2 异常
   "enabled": 1, // 是否启用通道：0否 1是。枚举：0 禁用，1 启用
   "rpcEnabled": 1, // 是否启用RPC处理：0否 1是
   "remark": "主链路" // 备注信息
@@ -1144,6 +1146,17 @@ FEP文件上传对象存储后发送的文件完成消息：
 
 ### `POST /collection/protocols/delete`
 
+删除前检查所有未删除采集接口的绑定关系，不区分启用状态。存在绑定时不删除，提示例如：`协议配置已被采集接口【接口A、接口B】绑定，不能删除`。已删除的采集接口不阻止删除。
+
+存在绑定时返回 HTTP 400：
+
+```json
+{
+  "code": 400,
+  "message": "协议配置已被采集接口【接口A、接口B】绑定，不能删除"
+}
+```
+
 入参：
 
 ```jsonc
@@ -1180,55 +1193,6 @@ FEP文件上传对象存储后发送的文件完成消息：
   "message": "操作成功" // 业务处理结果提示信息
 }
 ```
-
-### `GET /collection/events/overview`
-
-入参：
-
-查询：taskId=TASK-20260908-001
-
-出参：
-
-```jsonc
-{
-  "code": 200, // 业务状态码，200 表示操作成功
-  "message": "操作成功", // 业务处理结果提示信息
-  "data": { // 接口返回的业务数据
-    "infoTotal": 120, // 信息级事件数量
-    "warningTotal": 8, // 警告级事件数量
-    "errorTotal": 2, // 错误级事件数量
-    "criticalTotal": 1 // 严重级事件数量
-  }
-}
-```
-
-### `GET /collection/events`
-
-入参：
-
-查询：taskId=TASK-20260908-001
-
-出参：
-
-```jsonc
-{
-  "code": 200, // 业务状态码，200 表示操作成功
-  "message": "操作成功", // 业务处理结果提示信息
-  "data": [ // 接口返回的业务数据
-    {
-      "id": 31, // 业务数据主键 ID
-      "logTime": "2026-07-30T15:20:00", // 日志实际发生时间
-      "logLevel": "INFO", // 日志级别。枚举：DEBUG 调试，INFO 信息，WARN 警告，ERROR 错误
-      "logLevelName": "信息", // 日志级别中文名称，前端可直接展示
-      "logSource": "采集服务", // 日志来源模块
-      "operatorId": "system", // 日志操作人或系统标识
-      "logContent": "接口连接成功", // 日志内容
-      "logDetail": "192.168.1.10:9001" // 日志详细信息
-    }
-  ]
-}
-```
-
 
 ## 4. 数据可视化
 
@@ -1574,41 +1538,9 @@ FEP文件上传对象存储后发送的文件完成消息：
   "code": 200, // 业务状态码，200 表示操作成功
   "message": "操作成功", // 业务处理结果提示信息
   "data": { // 接口返回的业务数据
-    "processRate": "2400 条/秒", // 当前任务所有接口上一秒成功处理的PDXP条数总和
-    "cpuUsage": "36.50%", // 数据处理服务进程CPU使用率
-    "memoryUsage": "0.50 GB" // 数据处理服务JVM已使用内存
-  }
-}
-```
-
-### `GET /processing/logs`
-
-入参：
-
-查询参数见 URL
-
-出参：
-
-```jsonc
-{
-  "code": 200, // 业务状态码，200 表示操作成功
-  "message": "操作成功", // 业务处理结果提示信息
-  "data": { // 接口返回的业务数据
-    "pageNum": 1, // 当前页码，从 1 开始
-    "pageSize": 20, // 每页记录数量，最大 100 条
-    "total": 1, // 符合查询条件的记录总数
-    "records": [ // 当前页数据列表
-      {
-        "id": 71, // 业务数据主键 ID
-        "taskId": "TASK-20260908-001", // 外部试验任务编号
-        "processTaskId": 61, // 数据处理任务 ID
-        "logTime": "2026-07-30T15:20:00", // 日志实际发生时间
-        "logLevel": 1, // 日志级别。枚举：1 信息，2 警告，3 错误
-        "logLevelName": "信息", // 日志级别中文名称，前端可直接展示
-        "logContent": "批次处理完成", // 日志内容
-        "createTime": "2026-07-30T15:20:01" // 记录创建时间
-      }
-    ]
+    "processRate": "2400 条/秒", // 当前任务所有接口的PDXP帧处理速率之和，按各接口实际采样间隔计算
+    "cpuUsage": "36.50%", // 管理服务所在机器整体CPU使用率，与系统告警同口径
+    "memoryUsage": "23.50%" // 管理服务所在机器物理内存使用率，与系统告警同口径
   }
 }
 ```
@@ -1712,10 +1644,8 @@ file=@TMtable-A.txt
       "id": 91, // 业务数据主键 ID
       "taskId": "TASK-20260908-001", // 外部试验任务编号
       "channelName": "温度通道1", // 校准通道名称
-      "channelType": 1, // 通道类型：1 温度，2 电压，3 电流，4 功率，5 姿态传感器。枚举：1 温度传感器，2 电压传感器，3 电流传感器，4 功率传感器，5 姿态传感器
-      "channelTypeName": "温度传感器", // 通道类型中文名称
       "calibrationFormula": "CH01", // 校准公式
-      "normalRange": "-20~80", // 通道正常数值范围
+      "normalRange": "-20~80", // 正常数值范围，仅阈值法必填；其他算法可不填
       "detectMethod": 3, // 野值检测方法：1莱特准则 2阈值法 3肖维涅法。枚举：1 莱特准则，2 阈值法，3 肖维涅法
       "detectMethodName": "肖维涅法", // 野值检测方法中文名称
       "sigmaValue": 3, // 莱特准则使用的 Sigma 检测阈值
@@ -1753,10 +1683,8 @@ file=@TMtable-A.txt
     "id": 91, // 业务数据主键 ID
     "taskId": "TASK-20260908-001", // 外部试验任务编号
     "channelName": "温度通道1", // 校准通道名称
-    "channelType": 1, // 通道类型：1 温度，2 电压，3 电流，4 功率，5 姿态传感器。枚举：1 温度传感器，2 电压传感器，3 电流传感器，4 功率传感器，5 姿态传感器
-    "channelTypeName": "温度传感器", // 通道类型中文名称
     "calibrationFormula": "CH01", // 校准公式
-    "normalRange": "-20~80", // 通道正常数值范围
+    "normalRange": "-20~80", // 正常数值范围，仅阈值法必填；其他算法可不填
     "detectMethod": 3, // 野值检测方法：1莱特准则 2阈值法 3肖维涅法。枚举：1 莱特准则，2 阈值法，3 肖维涅法
     "detectMethodName": "肖维涅法", // 野值检测方法中文名称
     "sigmaValue": 3, // 莱特准则使用的 Sigma 检测阈值
@@ -1801,9 +1729,8 @@ file=@TMtable-A.txt
 {
   "taskId": "TASK-20260908-001", // 外部试验任务编号
   "channelName": "温度通道1", // 校准通道名称
-  "channelType": 1, // 通道类型：1 温度，2 电压，3 电流，4 功率，5 姿态传感器。枚举：1 温度传感器，2 电压传感器，3 电流传感器，4 功率传感器，5 姿态传感器
   "calibrationFormula": "CH01", // 校准公式
-  "normalRange": "-20~80", // 通道正常数值范围
+  "normalRange": "-20~80", // 正常数值范围，仅阈值法必填；其他算法可不填
   "detectMethod": 3, // 野值检测方法：1莱特准则 2阈值法 3肖维涅法。枚举：1 莱特准则，2 阈值法，3 肖维涅法
   "sigmaValue": 3, // 莱特准则使用的 Sigma 检测阈值
   "fluctuationRate": 10, // 阈值法使用的阈值百分比
@@ -1837,9 +1764,8 @@ file=@TMtable-A.txt
   "id": 91, // 业务数据主键 ID
   "taskId": "TASK-20260908-001", // 外部试验任务编号
   "channelName": "温度通道1", // 校准通道名称
-  "channelType": 1, // 通道类型：1 温度，2 电压，3 电流，4 功率，5 姿态传感器。枚举：1 温度传感器，2 电压传感器，3 电流传感器，4 功率传感器，5 姿态传感器
   "calibrationFormula": "CH01", // 校准公式
-  "normalRange": "-30~90", // 通道正常数值范围
+  "normalRange": "-30~90", // 正常数值范围，仅阈值法必填；其他算法可不填
   "detectMethod": 3, // 野值检测方法：1莱特准则 2阈值法 3肖维涅法。枚举：1 莱特准则，2 阈值法，3 肖维涅法
   "sigmaValue": 3, // 莱特准则使用的 Sigma 检测阈值
   "fluctuationRate": 10, // 阈值法使用的阈值百分比
@@ -1959,32 +1885,28 @@ file=@TMtable-A.txt
 
 ### `GET /alarms/system-monitor/current`
 
-入参：
+采集节点总数查询全部未删除接口，在线数表示已启用接口数；服务状态实时查询注册中心，消息消费积压本次保持原逻辑。
 
-查询：taskId=TASK-20260908-001
-
-出参：
-
-```jsonc
+```json
 {
-  "code": 200, // 业务状态码，200 表示操作成功
-  "message": "操作成功", // 业务处理结果提示信息
-  "data": { // 接口返回的业务数据
-    "id": 111, // 业务数据主键 ID
-    "taskId": "TASK-20260908-001", // 外部试验任务编号
-    "sampleTime": "2026-07-30T15:20:00", // 数据采样时间
-    "serviceStatus": "RUNNING", // 数据处理服务运行状态。枚举：RUNNING 运行中，DOWN 已停止，ERROR 异常
-    "uptimeSeconds": 86400, // 服务持续运行时长，单位为秒
-    "onlineNodeCount": 3, // 当前在线处理节点数量
-    "totalNodeCount": 3, // 处理节点总数量
-    "databaseLatencyMs": 12, // 数据库连接检测耗时，单位为毫秒
-    "messageQueueDepth": 8, // RocketMQ数据处理结果消费者组当前积压数量
-    "heartbeatStatus": "NORMAL", // 数据处理服务心跳状态。枚举：NORMAL 正常，WAITING 等待心跳
-    "lastHeartbeatTime": "2026-07-30T15:19:58", // 最近一次数据处理服务心跳时间
-    "cpuUsagePercent": 36.5, // CPU 使用率，单位为百分比
-    "memoryUsagePercent": 58.2, // 内存使用率，单位为百分比
-    "diskUsagePercent": 42.1, // 磁盘使用率，单位为百分比
-    "healthScore": 96 // 系统综合健康评分，范围 0～100
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "sampleTime": "2026-10-09T12:00:00",
+    "serviceStatus": "RUNNING",
+    "serviceStatusName": "运行中",
+    "uptimeSeconds": 86400,
+    "onlineNodeCount": 3,
+    "totalNodeCount": 5,
+    "databaseLatencyMs": 12,
+    "messageQueueDepth": null,
+    "heartbeatStatus": "WAITING",
+    "heartbeatStatusName": "等待心跳",
+    "lastHeartbeatTime": null,
+    "cpuUsagePercent": 36.5,
+    "memoryUsagePercent": 58.2,
+    "diskUsagePercent": 42.1,
+    "healthScore": 42
   }
 }
 ```
@@ -2024,91 +1946,49 @@ file=@TMtable-A.txt
 }
 ```
 
-### `GET /alarms/system-monitor/events`
-
-入参：
-
-查询：status=0
-
-出参：
-
-```jsonc
-{
-  "code": 200, // 业务状态码，200 表示操作成功
-  "message": "操作成功", // 业务处理结果提示信息
-  "data": [ // 接口返回的业务数据
-    {
-      "id": 121, // 业务数据主键 ID
-      "alarmTime": "2026-07-30T15:10:00", // 告警触发时间
-      "targetName": "处理节点01", // 系统健康告警对象名称
-      "metricCode": "cpu_usage", // 触发系统健康告警的指标编码。枚举：cpu_usage CPU 使用率，memory_usage 内存使用率，disk_usage 磁盘使用率，queue_depth 消息队列积压数量
-      "alarmLevel": 2, // 系统告警级别。枚举：1 提示，2 一般，3 严重
-      "alarmContent": "CPU 使用率超过阈值", // 告警详细内容
-      "alarmStatus": 0, // 系统告警恢复状态。枚举：0 未恢复，1 已恢复
-      "currentValue": 91.2, // 触发告警时的当前指标值
-      "thresholdValue": 85, // 告警判断阈值
-      "firstAlarmTime": "2026-07-30T15:10:00", // 首次触发告警的时间
-      "lastAlarmTime": "2026-07-30T15:18:00", // 最近一次检测到异常的时间
-      "recoverTime": null, // 告警恢复时间，未恢复时为空
-      "triggerCount": 3 // 连续命中告警条件的次数
-    }
-  ]
-}
-```
-
 ### `GET /alarms/data`
 
-入参：
+来源筛选使用 `/alarms/findData` 返回的英文编码，参数名为 `sourceCode`；查询结果中的 `sourceName` 是中文展示名称。数据告警仅使用2一般、4严重。
 
 ```http
-GET /alarms/data?taskId=TASK-20260908-001&sourceName=温度监控&keyword=超限&alarmLevel=4&alarmStatus=0&startTime=2026-08-06T00:00:00&endTime=2026-08-06T23:59:59&pageNum=1&pageSize=20
+GET /alarms/data?taskId=TASK-20260908-001&sourceCode=PROCESSING&pageNum=1&pageSize=20
 ```
 
-`sourceName` 精确匹配来源；`keyword` 模糊匹配来源、告警信息、任务名称、通道编码和触发规则。
-
-出参：
-
-```jsonc
+```json
 {
-  "code": 200, // 业务状态码，200 表示操作成功
-  "message": "操作成功", // 业务处理结果提示信息
-  "data": { // 接口返回的业务数据
-    "pageNum": 1, // 当前页码，从 1 开始
-    "pageSize": 20, // 每页记录数量，最大 100 条
-    "total": 1, // 符合查询条件的记录总数
-    "records": [ // 当前页数据列表
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "pageNum": 1,
+    "pageSize": 20,
+    "total": 1,
+    "records": [
       {
-        "id": 131, // 业务数据主键 ID
-        "taskId": "TASK-20260908-001", // 外部试验任务编号
-        "alarmTime": "2026-07-30T15:20:00", // 告警触发时间
-        "sourceName": "遥测接口", // 告警数据来源名称
-        "alarmMsg": "温度超上限", // 数据监测告警内容
-        "alarmLevel": 4, // 数据监测告警级别。枚举：1 提示，2 一般，3 轻微，4 严重，5 紧急
-        "alarmStatus": 0, // 数据告警处理状态。枚举：0 未处理，1 已处理
-        "taskName": "任务A", // 试验任务或数据处理任务名称
-        "channelCode": "TEMP_01", // 触发告警的通道编码
-        "triggerRule": "> 80℃" // 告警触发规则说明
+        "id": 121,
+        "taskId": "TASK-20260908-001",
+        "alarmTime": "2026-10-09T12:00:00",
+        "sourceCode": "PROCESSING",
+        "sourceName": "数据处理",
+        "eventType": "PARAMETER_RANGE",
+        "eventTypeName": "遥测参数越限",
+        "alarmMsg": "遥测参数越限；接口：遥测采集（ID：11）；参数：温度（TM001）；判定原码值：120；未命中允许范围",
+        "alarmLevel": 2,
+        "alarmLevelName": "一般",
+        "alarmStatus": 0,
+        "alarmStatusName": "未处理",
+        "interfaceId": 11,
+        "processTaskId": null,
+        "calibChannelId": null,
+        "tmSymbol": "TM001",
+        "parameterName": "温度",
+        "triggerRule": "正常(0~100)",
+        "alarmDetail": "事件：遥测参数越限；接口：遥测采集（ID：11）；监听地址：127.0.0.1:9001；参数：温度（TM001）；判定原码值：120；规则：正常(0~100)",
+        "triggerCount": 3,
+        "lastTriggerTime": "2026-10-09T12:00:10",
+        "recoverTime": null
       }
     ]
   }
-}
-```
-
-### `GET /alarms/data/sources`
-
-入参：
-
-```http
-GET /alarms/data/sources?taskId=TASK-20260908-001
-```
-
-出参：
-
-```jsonc
-{
-  "code": 200, // 业务状态码，200 表示操作成功
-  "message": "操作成功", // 业务处理结果提示信息
-  "data": ["温度监控", "电压监控", "载荷设备"] // 来源下拉选项
 }
 ```
 
@@ -2128,9 +2008,10 @@ GET /alarms/data/sources?taskId=TASK-20260908-001
     "id": 131, // 业务数据主键 ID
     "taskId": "TASK-20260908-001", // 外部试验任务编号
     "alarmTime": "2026-07-30T15:20:00", // 告警触发时间
-    "sourceName": "遥测接口", // 告警数据来源名称
+    "sourceCode": "PROCESSING", // 告警来源英文编码
+    "sourceName": "数据处理", // 告警来源中文名称，仅用于展示
     "alarmMsg": "温度超上限", // 数据监测告警内容
-    "alarmLevel": 4, // 数据监测告警级别。枚举：1 提示，2 一般，3 轻微，4 严重，5 紧急
+    "alarmLevel": 4, // 数据监测告警级别。枚举：2 一般，4 严重
     "alarmStatus": 0, // 数据告警处理状态。枚举：0 未处理，1 已处理
     "taskName": "任务A", // 试验任务或数据处理任务名称
     "channelCode": "TEMP_01", // 触发告警的通道编码
@@ -2139,89 +2020,16 @@ GET /alarms/data/sources?taskId=TASK-20260908-001
 }
 ```
 
-### `POST /alarms/data/create`
-
-入参：
-
-```jsonc
-{
-  "taskId": "TASK-20260908-001", // 外部试验任务编号
-  "alarmTime": "2026-07-30T15:20:00", // 告警触发时间
-  "sourceName": "遥测接口", // 告警数据来源名称
-  "alarmMsg": "温度超上限", // 数据监测告警内容
-  "alarmLevel": 4, // 数据监测告警级别。枚举：1 提示，2 一般，3 轻微，4 严重，5 紧急
-  "alarmStatus": 0, // 数据告警处理状态。枚举：0 未处理，1 已处理
-  "taskName": "任务A", // 试验任务或数据处理任务名称
-  "channelCode": "TEMP_01", // 触发告警的通道编码
-  "triggerRule": "> 80℃" // 告警触发规则说明
-}
-```
-
-出参：
-
-```jsonc
-{
-  "code": 200, // 业务状态码，200 表示操作成功
-  "message": "操作成功", // 业务处理结果提示信息
-  "data": 131 // 接口返回的业务数据
-}
-```
-
-### `POST /alarms/data/update`
-
-入参：
-
-```jsonc
-{
-  "id": 131, // 业务数据主键 ID
-  "taskId": "TASK-20260908-001", // 外部试验任务编号
-  "alarmTime": "2026-07-30T15:20:00", // 告警触发时间
-  "sourceName": "遥测接口", // 告警数据来源名称
-  "alarmMsg": "温度持续超上限", // 数据监测告警内容
-  "alarmLevel": 5, // 数据监测告警级别。枚举：1 提示，2 一般，3 轻微，4 严重，5 紧急
-  "alarmStatus": 0, // 数据告警处理状态。枚举：0 未处理，1 已处理
-  "taskName": "任务A", // 试验任务或数据处理任务名称
-  "channelCode": "TEMP_01", // 触发告警的通道编码
-  "triggerRule": "> 80℃" // 告警触发规则说明
-}
-```
-
-出参：
-
-```jsonc
-{
-  "code": 200, // 业务状态码，200 表示操作成功
-  "message": "操作成功" // 业务处理结果提示信息
-}
-```
-
-### `POST /alarms/data/delete`
-
-入参：
-
-```jsonc
-{
-  "id": 131 // 业务数据主键 ID
-}
-```
-
-出参：
-
-```jsonc
-{
-  "code": 200, // 业务状态码，200 表示操作成功
-  "message": "操作成功" // 业务处理结果提示信息
-}
-```
-
 ### `POST /alarms/data/status`
 
+只修改人工处理状态，不改变告警内容及自动恢复时间；操作记录到系统日志。
+
 入参：
 
 ```jsonc
 {
   "id": 131, // 业务数据主键 ID
-  "status": 1 // 启用状态。枚举：0 停用，1 启用
+  "status": 1 // 人工处理状态。枚举：0 未处理，1 已处理
 }
 ```
 
@@ -2236,143 +2044,37 @@ GET /alarms/data/sources?taskId=TASK-20260908-001
 
 ### `GET /alarms/system`
 
-入参：
+可选查询参数：`status=0`（未恢复）或 `status=1`（已恢复）。系统告警统一自动入库，不再提供人工写入接口。
 
-无查询参数。
-
-出参：
-
-```jsonc
+```json
 {
-  "code": 200, // 业务状态码，200 表示操作成功
-  "message": "操作成功", // 业务处理结果提示信息
-  "data": [ // 接口返回的业务数据
+  "code": 200,
+  "message": "操作成功",
+  "data": [
     {
-      "id": 141, // 业务数据主键 ID
-      "alarmTime": "2026-07-30T15:20:00", // 告警触发时间
-      "objName": "数据库", // 发生告警的系统对象名称
-      "alarmType": "连接异常", // 系统告警类型
-      "alarmContent": "数据库连接延迟过高", // 告警详细内容
-      "alarmLevel": 2, // 系统告警级别。枚举：1 提示，2 一般，3 严重
-      "alarmStatus": 0, // 系统告警恢复状态。枚举：0 未恢复，1 已恢复
+      "id": 141,
+      "alarmTime": "2026-10-09T12:00:00",
+      "objName": "计算服务CPU",
+      "alarmType": "cpu_usage",
+      "alarmTypeName": "CPU使用率",
+      "alarmContent": "CPU使用率为92，持续超过阈值85",
+      "alarmLevel": 2,
+      "alarmLevelName": "一般",
+      "alarmStatus": 0,
+      "alarmStatusName": "未恢复",
+      "isDeleted": 0,
+      "metricCode": "cpu_usage",
+      "metricName": "CPU使用率",
+      "currentValue": 92,
+      "thresholdValue": 85,
+      "firstAlarmTime": "2026-10-09T12:00:00",
+      "lastAlarmTime": "2026-10-09T12:00:10",
+      "recoverTime": null,
+      "triggerCount": 3
     }
   ]
 }
 ```
-
-### `GET /alarms/system/141`
-
-入参：
-
-路径：id=141
-
-出参：
-
-```jsonc
-{
-  "code": 200, // 业务状态码，200 表示操作成功
-  "message": "操作成功", // 响应提示信息
-  "data": { // 接口返回的业务数据
-    "id": 141, // 业务数据主键 ID
-    "alarmTime": "2026-07-30T15:20:00", // 告警触发时间
-    "objName": "数据库", // 发生告警的系统对象名称
-    "alarmType": "连接异常", // 系统告警类型
-    "alarmContent": "数据库连接延迟过高", // 告警详细内容
-    "alarmLevel": 2, // 系统告警级别。枚举：1 提示，2 一般，3 严重
-    "alarmStatus": 0, // 系统告警恢复状态。枚举：0 未恢复，1 已恢复
-  }
-}
-```
-
-### `POST /alarms/system/create`
-
-入参：
-
-```jsonc
-{
-  "alarmTime": "2026-07-30T15:20:00", // 告警触发时间
-  "objName": "数据库", // 发生告警的系统对象名称
-  "alarmType": "连接异常", // 系统告警类型
-  "alarmContent": "数据库连接延迟过高", // 告警详细内容
-  "alarmLevel": 2, // 系统告警级别。枚举：1 提示，2 一般，3 严重
-  "alarmStatus": 0 // 系统告警恢复状态。枚举：0 未恢复，1 已恢复
-}
-```
-
-出参：
-
-```jsonc
-{
-  "code": 200, // 业务状态码，200 表示操作成功
-  "message": "操作成功", // 业务处理结果提示信息
-  "data": 141 // 接口返回的业务数据
-}
-```
-
-### `POST /alarms/system/update`
-
-入参：
-
-```jsonc
-{
-  "id": 141, // 业务数据主键 ID
-  "alarmTime": "2026-07-30T15:20:00", // 告警触发时间
-  "objName": "数据库", // 发生告警的系统对象名称
-  "alarmType": "连接异常", // 系统告警类型
-  "alarmContent": "数据库连接超时", // 告警详细内容
-  "alarmLevel": 3, // 系统告警级别。枚举：1 提示，2 一般，3 严重
-  "alarmStatus": 0 // 系统告警恢复状态。枚举：0 未恢复，1 已恢复
-}
-```
-
-出参：
-
-```jsonc
-{
-  "code": 200, // 业务状态码，200 表示操作成功
-  "message": "操作成功" // 业务处理结果提示信息
-}
-```
-
-### `POST /alarms/system/delete`
-
-入参：
-
-```jsonc
-{
-  "id": 141 // 业务数据主键 ID
-}
-```
-
-出参：
-
-```jsonc
-{
-  "code": 200, // 业务状态码，200 表示操作成功
-  "message": "操作成功" // 业务处理结果提示信息
-}
-```
-
-### `POST /alarms/system/status`
-
-入参：
-
-```jsonc
-{
-  "id": 141, // 业务数据主键 ID
-  "status": 1 // 启用状态。枚举：0 停用，1 启用
-}
-```
-
-出参：
-
-```jsonc
-{
-  "code": 200, // 业务状态码，200 表示操作成功
-  "message": "操作成功" // 业务处理结果提示信息
-}
-```
-
 
 ## 8. 系统日志
 
@@ -2381,10 +2083,10 @@ GET /alarms/data/sources?taskId=TASK-20260908-001
 入参：
 
 ```http
-GET /system/logs?taskId=TASK-20260908-001&logLevel=ERROR&logSource=ProtocolParser&operatorId=admin&keyword=解析失败&startTime=2026-08-06T00:00:00&endTime=2026-08-06T23:59:59&pageNum=1&pageSize=20
+GET /system/logs?taskId=TASK-20260908-001&logLevel=ERROR&logSource=COLLECTION&operatorId=admin&keyword=创建采集接口失败&startTime=2026-08-06T00:00:00&endTime=2026-08-06T23:59:59&pageNum=1&pageSize=20
 ```
 
-日志级别枚举：`DEBUG` 调试、`INFO` 信息、`WARN` 警告、`ERROR` 错误。
+日志级别枚举：`INFO` 信息、`WARN` 警告、`ERROR` 错误。
 
 出参：
 
@@ -2401,33 +2103,16 @@ GET /system/logs?taskId=TASK-20260908-001&logLevel=ERROR&logSource=ProtocolParse
         "id": 201, // 日志主键ID
         "taskId": "TASK-20260908-001", // 外部试验任务编号
         "logTime": "2026-08-06T14:39:14", // 日志发生时间
-        "logLevel": "ERROR", // 日志级别：DEBUG调试 INFO信息 WARN警告 ERROR错误
+        "logLevel": "ERROR", // 日志级别：INFO信息 WARN警告 ERROR错误
         "logLevelName": "错误", // 日志级别中文名称，前端可直接展示
-        "logSource": "ProtocolParser", // 日志来源
+        "logSource": "COLLECTION", // 日志来源英文编码
+        "logSourceName": "数据采集", // 日志来源中文名称
         "operatorId": "admin", // 操作人标识
-        "logContent": "任务执行异常退出", // 日志内容
-        "logDetail": "[ProtocolParser]任务执行异常退出 - traceId=lhwykl0v" // 完整详情
+        "logContent": "创建采集接口失败", // 日志内容
+        "logDetail": "操作人：admin；接口名称：遥测接收接口；接口ID：101；结果：创建失败；原因：后台异常" // 完整详情
       }
     ]
   }
-}
-```
-
-### `GET /system/logs/sources`
-
-入参：
-
-```http
-GET /system/logs/sources?taskId=TASK-20260908-001
-```
-
-出参：
-
-```jsonc
-{
-  "code": 200,
-  "message": "操作成功",
-  "data": ["AgentManager", "DataCollector", "ProtocolParser", "StorageService"]
 }
 ```
 
@@ -2443,12 +2128,13 @@ GET /system/logs/sources?taskId=TASK-20260908-001
     "id": 201,
     "taskId": "TASK-20260908-001",
     "logTime": "2026-08-06T14:39:14",
-    "logLevel": "ERROR", // 日志级别：DEBUG调试 INFO信息 WARN警告 ERROR错误
+    "logLevel": "ERROR", // 日志级别：INFO信息 WARN警告 ERROR错误
     "logLevelName": "错误", // 日志级别中文名称，前端可直接展示
-    "logSource": "ProtocolParser",
+    "logSource": "COLLECTION",
+    "logSourceName": "数据采集",
     "operatorId": "admin",
-    "logContent": "任务执行异常退出",
-    "logDetail": "[ProtocolParser]任务执行异常退出 - traceId=lhwykl0v"
+    "logContent": "创建采集接口失败",
+    "logDetail": "操作人：admin；接口名称：遥测接收接口；接口ID：101；结果：创建失败；原因：后台异常"
   }
 }
 ```
@@ -2554,3 +2240,281 @@ GET /system/logs/sources?taskId=TASK-20260908-001
 `GET /processing/realtime/telemetry`、`GET /processing/processed`和`GET /processing/realtime/invalid`均增加`pageNum`和`pageSize`，默认分别为1和20，`pageSize`最大为200。响应`data`统一包含`pageNum`、`pageSize`、`total`和`records`。处理后参数查询使用所有参数统一保存的`valueText`作为`parameterValue`，避免不同物理量数据类型在IoTDB跨设备查询时发生冲突。
 
 IoTDB设备路径将任务编号和采集接口编号放在卫星之前，统一格式为`root.db.task_{taskId}.interface_{interfaceId}.{satelliteCode}.tms.{channelCode}.{tmType}.{node}`。整帧节点使用`_frame`，参数节点使用参数代号`tmSymbol`。查询端直接使用任务和接口路径前缀缩小设备范围，不再展开整个`root.db`后通过测点筛选任务和接口。
+
+### `GET /alarms/findData`
+
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "dataAlarmSource": [
+      {
+        "value": "COLLECTION",
+        "label": "数据采集"
+      },
+      {
+        "value": "PROCESSING",
+        "label": "数据处理"
+      },
+      {
+        "value": "CALIBRATION",
+        "label": "数据校准"
+      }
+    ],
+    "dataAlarmEventType": [
+      {
+        "value": "INTERFACE_SYNC",
+        "label": "采集运行状态同步失败"
+      },
+      {
+        "value": "INTERFACE_START",
+        "label": "接口启动失败"
+      },
+      {
+        "value": "INTERFACE_STOP",
+        "label": "采集接口停止接收"
+      },
+      {
+        "value": "COLLECTION_RECEIVE",
+        "label": "接口接收异常"
+      },
+      {
+        "value": "PACKET_PARSE",
+        "label": "报文解析失败"
+      },
+      {
+        "value": "FILE_RECEIVE",
+        "label": "文件接收失败"
+      },
+      {
+        "value": "PROCESS_QUEUE",
+        "label": "处理队列已满"
+      },
+      {
+        "value": "PROCESS_CONFIG",
+        "label": "参数处理失败"
+      },
+      {
+        "value": "RPC_FAILURE",
+        "label": "远程处理失败"
+      },
+      {
+        "value": "PARAMETER_RANGE",
+        "label": "遥测参数越限"
+      },
+      {
+        "value": "STORAGE_FAILURE",
+        "label": "数据存储失败"
+      },
+      {
+        "value": "MESSAGE_FAILURE",
+        "label": "结果消息发送失败"
+      },
+      {
+        "value": "FILE_RESULT",
+        "label": "文件结果处理失败"
+      },
+      {
+        "value": "CALIBRATION_OUTLIER",
+        "label": "校准野值"
+      },
+      {
+        "value": "CALIBRATION_RULE",
+        "label": "校准规则异常"
+      },
+      {
+        "value": "CALIBRATION_CACHE",
+        "label": "校准缓存失败"
+      },
+      {
+        "value": "CALIBRATION_PERSIST",
+        "label": "校准记录落库失败"
+      }
+    ],
+    "dataAlarmLevel": [
+      {
+        "value": 2,
+        "label": "一般"
+      },
+      {
+        "value": 4,
+        "label": "严重"
+      }
+    ],
+    "dataAlarmStatus": [
+      {
+        "value": 0,
+        "label": "未处理"
+      },
+      {
+        "value": 1,
+        "label": "已处理"
+      }
+    ],
+    "systemAlarmLevel": [
+      {
+        "value": 2,
+        "label": "一般"
+      },
+      {
+        "value": 3,
+        "label": "严重"
+      }
+    ],
+    "systemAlarmStatus": [
+      {
+        "value": 0,
+        "label": "未恢复"
+      },
+      {
+        "value": 1,
+        "label": "已恢复"
+      }
+    ],
+    "serviceStatus": [
+      {
+        "value": "RUNNING",
+        "label": "运行中"
+      },
+      {
+        "value": "DOWN",
+        "label": "停止"
+      },
+      {
+        "value": "ERROR",
+        "label": "查询异常"
+      }
+    ],
+    "metricCode": [
+      {
+        "value": "cpu_usage",
+        "label": "CPU使用率"
+      },
+      {
+        "value": "memory_usage",
+        "label": "内存使用率"
+      },
+      {
+        "value": "disk_usage",
+        "label": "磁盘使用率"
+      },
+      {
+        "value": "queue_depth",
+        "label": "消息积压数量"
+      }
+    ],
+    "heartbeatStatus": [
+      {
+        "value": "NORMAL",
+        "label": "正常"
+      },
+      {
+        "value": "WAITING",
+        "label": "等待心跳"
+      }
+    ],
+    "changeType": [
+      {
+        "value": "CREATED",
+        "label": "新增"
+      },
+      {
+        "value": "UPDATED",
+        "label": "持续触发"
+      },
+      {
+        "value": "RECOVERED",
+        "label": "已恢复"
+      }
+    ],
+    "systemAlarmType": [
+      {
+        "value": "cpu_usage",
+        "label": "CPU使用率"
+      },
+      {
+        "value": "memory_usage",
+        "label": "内存使用率"
+      },
+      {
+        "value": "disk_usage",
+        "label": "磁盘使用率"
+      },
+      {
+        "value": "queue_depth",
+        "label": "消息积压数量"
+      }
+    ]
+  }
+}
+```
+
+### `GET /system/logs/findData`
+
+无需入参。来源选项固定返回，不依赖任务或已有日志；筛选日志时使用选项中的英文 `value`，`label` 仅用于展示。
+
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "logLevel": [
+      {
+        "value": "INFO",
+        "label": "信息"
+      },
+      {
+        "value": "WARN",
+        "label": "警告"
+      },
+      {
+        "value": "ERROR",
+        "label": "错误"
+      }
+    ],
+    "logSource": [
+      {
+        "value": "COLLECTION",
+        "label": "数据采集"
+      },
+      {
+        "value": "PROCESSING",
+        "label": "数据处理"
+      },
+      {
+        "value": "CALIBRATION",
+        "label": "数据校准"
+      },
+      {
+        "value": "VISUALIZATION",
+        "label": "数据可视化"
+      },
+      {
+        "value": "TELEMETRY_FILTER",
+        "label": "遥测参数筛选"
+      },
+      {
+        "value": "ALARM_MANAGEMENT",
+        "label": "告警管理"
+      },
+      {
+        "value": "USER_MANAGEMENT",
+        "label": "用户管理"
+      },
+      {
+        "value": "ROLE_MANAGEMENT",
+        "label": "角色管理"
+      },
+      {
+        "value": "SATELLITE_CATALOG",
+        "label": "卫星目录"
+      },
+      {
+        "value": "AUTHENTICATION",
+        "label": "用户认证"
+      }
+    ]
+  }
+}
+```
