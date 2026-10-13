@@ -297,7 +297,6 @@ CREATE TABLE IF NOT EXISTS calib_channel_config (
     dynamic_update INT NOT NULL DEFAULT 0,
     auto_clean INT NOT NULL DEFAULT 0,
     enabled INT NOT NULL DEFAULT 1,
-    channel_status INT NOT NULL DEFAULT 1,
     is_deleted INT NOT NULL DEFAULT 0,
     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -319,7 +318,6 @@ COMMENT ON COLUMN calib_channel_config.sample_window IS '莱特准则使用的�
 COMMENT ON COLUMN calib_channel_config.dynamic_update IS '是否动态更新：0否 1是';
 COMMENT ON COLUMN calib_channel_config.auto_clean IS '是否自动排除异常值：0否 1是';
 COMMENT ON COLUMN calib_channel_config.enabled IS '是否启用通道：0否 1是';
-COMMENT ON COLUMN calib_channel_config.channel_status IS '通道状态：0停止 1正常 2异常';
 COMMENT ON COLUMN calib_channel_config.is_deleted IS '是否删除：0否 1是';
 COMMENT ON COLUMN calib_channel_config.create_time IS '创建时间';
 COMMENT ON COLUMN calib_channel_config.update_time IS '更新时间';

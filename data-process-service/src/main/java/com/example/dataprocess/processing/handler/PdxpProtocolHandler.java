@@ -174,10 +174,16 @@ public class PdxpProtocolHandler implements ProtocolHandler {
             CollectInterfaceRuntimeConfig config,
             PdxpParser.PdxpPacket packet) {
         com.example.common.enums.DataAlarmType stage = com.example.common.enums.DataAlarmType.PACKET_PARSE;
+        // 只有本地参数处理失败且数据域已成功拆分，才允许保存异常整帧。
+        boolean localProcessing = !Integer.valueOf(1).equals(config.getRpcEnabled());
+        boolean payloadParsed = false;
+        // 告警组件随后报错时也不重复提交同一异常整帧。
+        boolean abnormalFrameAttempted = false;
         try {
             // 第一步：拆分自定义数据、遥测原始数据和遥测帧头。
             PdxpDataPayload payload = PdxpDataPayloadParser.parse(
                     packet.getData());
+            payloadParsed = true;
             // 第二步：rpc_enabled只决定正常PDXP帧后的业务处理分支。
             DataProcessor processor = Integer.valueOf(1).equals(
                     config.getRpcEnabled()) ? rpcProcessor : localProcessor;
@@ -186,9 +192,13 @@ public class PdxpProtocolHandler implements ProtocolHandler {
             Optional<TelemetryMessage> processedMessage =
                     processor.process(config, packet, payload);
             if (!processedMessage.isPresent()) {
-                alarm(config, stage, "包序号：" + packet.getSequenceNumber() + "；未生成有效遥测结果，当前帧未入库");
-                // 没有最终Proto时不写IoTDB，避免产生缺少设备身份的孤立帧。
-                LOGGER.info("遥测消息转换失败，当前帧不写入IoTDB，接口编号：{}，包序号：{}",
+                // 本地没有解析结果时只保存异常整帧，RPC没有结果时保持不入库。
+                if (localProcessing) {
+                    abnormalFrameAttempted = true;
+                    saveLocalAbnormalFrame(config, packet);
+                }
+                alarm(config, stage, "包序号：" + packet.getSequenceNumber() + "；未生成有效遥测结果，不写参数、不发送遥测消息");
+                LOGGER.info("遥测消息转换失败，不写参数、不发送遥测消息，接口编号：{}，包序号：{}",
                         config.getInterfaceId(), packet.getSequenceNumber());
                 return;
             }
@@ -217,7 +227,7 @@ public class PdxpProtocolHandler implements ProtocolHandler {
                     .filter(telemetry -> telemetry.getIsWildValue())
                     .count());
             // 第五步：两个结果任务独立提交，处理线程不等待外部服务响应。
-            if (!resultDispatcher.submit(config, telemetryMessage, packet.getSequenceNumber())) {
+            if (!resultDispatcher.submit(config, telemetryMessage, packet)) {
                 // 提交失败已有独立告警，部分被接受的任务继续执行，当前帧不累计成功处理量。
                 return;
             }
@@ -225,11 +235,31 @@ public class PdxpProtocolHandler implements ProtocolHandler {
             statistics.recordFrameProcessing(
                     config.getTaskId(), config.getInterfaceId());
         } catch (Exception exception) {
+            // 仅回退本地参数处理阶段，不把数据域拆分、RPC、校准或结果任务错误误记为帧异常。
+            if (localProcessing && payloadParsed && !abnormalFrameAttempted
+                    && stage == com.example.common.enums.DataAlarmType.PROCESS_CONFIG) {
+                saveLocalAbnormalFrame(config, packet);
+            }
             // 校准层已记录具体参数时不重复生成接口级告警。
             if (!(exception instanceof com.example.dataprocess.service.RecordedDataAlarmException)) {
                 alarm(config, stage, "包序号：" + packet.getSequenceNumber() + "；当前帧处理失败：" + exception.getMessage());
             }
             LOGGER.error("正常PDXP帧后续处理失败，接口编号：{}，包序号：{}",
+                    config.getInterfaceId(), packet.getSequenceNumber(), exception);
+        }
+    }
+
+    /** 异常整帧异步保存失败不能掩盖原始参数解析错误。 */
+    private void saveLocalAbnormalFrame(CollectInterfaceRuntimeConfig config,
+            PdxpParser.PdxpPacket packet) {
+        try {
+            // 这里只提交已有入库线程池，实际写入仍会校验任务、设备、通道和数据域。
+            if (resultDispatcher.submitAbnormalLocalFrame(config, packet)) {
+                LOGGER.info("本地参数解析失败，异常整帧已提交入库，接口编号：{}，包序号：{}",
+                        config.getInterfaceId(), packet.getSequenceNumber());
+            }
+        } catch (RuntimeException exception) {
+            LOGGER.error("本地异常整帧任务提交失败，接口编号：{}，包序号：{}",
                     config.getInterfaceId(), packet.getSequenceNumber(), exception);
         }
     }

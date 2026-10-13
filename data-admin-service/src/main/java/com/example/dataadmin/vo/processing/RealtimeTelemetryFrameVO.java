@@ -2,7 +2,7 @@ package com.example.dataadmin.vo.processing;
 
 import java.time.LocalDateTime;
 
-/** IoTDB最终整帧数据。 */
+/** IoTDB完整采集帧，包括正常处理结果及已入库的异常帧。 */
 public class RealtimeTelemetryFrameVO {
     /** 设备卫星主键，来自IoTDB路径。 */
     private Long deviceSatelliteId;
@@ -10,11 +10,11 @@ public class RealtimeTelemetryFrameVO {
     private LocalDateTime time;
     /** 导入工作表名称。 */
     private String deviceSatelliteName;
-    /** Proto通道名称。 */
+    /** Proto通道名称；本地解析失败时取设备名称的下划线前缀。 */
     private String channelName;
-    /** 数据域原码字节数。 */
+    /** 完整帧原码字节数，包含各类头。 */
     private Integer rawLength;
-    /** 数据域原码十六进制文本。 */
+    /** 包含各类头的完整帧原码十六进制文本。 */
     private String rawFrame;
     /** 帧检查结果中文名称。 */
     private String checkResultName;

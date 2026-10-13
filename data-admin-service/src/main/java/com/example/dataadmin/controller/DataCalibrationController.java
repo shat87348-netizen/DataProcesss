@@ -3,6 +3,7 @@ package com.example.dataadmin.controller;
 import com.example.common.response.ApiResponse;
 import com.example.common.response.PageResult;
 import com.example.dataadmin.dto.IdRequest;
+import com.example.dataadmin.dto.calibration.CalibrationChannelEnabledRequest;
 import com.example.dataadmin.dto.calibration.ChannelSaveRequest;
 import com.example.dataadmin.entity.CalibChannelConfig;
 import com.example.dataadmin.entity.CalibRecord;
@@ -84,6 +85,17 @@ public class DataCalibrationController {
         requireSuccess(
                 calibrationService.updateChannelConfig(config),
                 "校准通道修改失败");
+        return ApiResponse.success();
+    }
+
+    /** 切换当前任务下校准通道的启用状态。 */
+    @PostMapping("/channels/enabled")
+    public ApiResponse<Void> updateChannelEnabled(
+            @Valid @RequestBody CalibrationChannelEnabledRequest request) {
+        // 仅修改指定任务下的通道开关，提交后刷新处理模块运行配置。
+        requireSuccess(calibrationService.updateChannelEnabled(
+                request.getTaskId(), request.getId(), request.getEnabled()),
+                "校准通道启用状态修改失败");
         return ApiResponse.success();
     }
 

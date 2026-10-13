@@ -4,6 +4,7 @@ import com.example.dataadmin.dto.UserSaveRequest;
 import com.example.dataadmin.entity.SysUser;
 import com.example.dataadmin.mapper.SysUserMapper;
 import com.example.dataadmin.service.UserService;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,15 +55,60 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public SysUser update(Long id, UserSaveRequest request) {
-        SysUser existingUser = mapper.findById(id);
-        if (existingUser == null) {
-            throw new IllegalArgumentException("用户不存在");
+        // 先检查请求与原用户，复用已有的用户存在性校验。
+        if (request == null) {
+            throw new IllegalArgumentException("用户资料不能为空");
         }
+        SysUser existingUser = requiredUser(id);
+        String username = resolveUpdatedUsername(existingUser, request.getUsername());
+
+        // 将校验后的登录用户名与其他资料一起保存，用户名未传时保留原值。
         SysUser user = toUser(request);
         user.setId(id);
-        mapper.update(user);
-        assignRole(existingUser, request.getRoleId());
+        user.setUsername(username);
+        try {
+            if (mapper.update(user) == 0) {
+                throw new IllegalArgumentException("用户不存在或已删除");
+            }
+        } catch (DuplicateKeyException exception) {
+            // 数据库唯一约束兜底处理并发重名和已删除账号占用的用户名。
+            throw new IllegalArgumentException("用户名已存在", exception);
+        }
+
+        // 角色调整仍与用户资料共用事务，返回重新查询后的最新用户名。
+        assignRole(user, request.getRoleId());
         return mapper.findById(id);
+    }
+
+    /** 解析修改后的用户名，并检查空值、管理员保护和用户名唯一性。 */
+    private String resolveUpdatedUsername(SysUser existingUser, String requestedUsername) {
+        // 兼容仅修改其他资料的请求；明确传入空字符串时拒绝保存。
+        if (requestedUsername == null) {
+            return existingUser.getUsername();
+        }
+        if (blank(requestedUsername)) {
+            throw new IllegalArgumentException("用户名不能为空");
+        }
+        String username = requestedUsername.trim();
+        if (username.length() > 64) {
+            throw new IllegalArgumentException("用户名长度不能超过64个字符");
+        }
+
+        // 保底管理员不能改名，其他账号也不能通过改名占用管理员身份。
+        if (ADMIN_USERNAME.equalsIgnoreCase(existingUser.getUsername())) {
+            if (!existingUser.getUsername().equals(username)) {
+                throw new IllegalArgumentException("不能修改管理员用户名");
+            }
+        } else if (ADMIN_USERNAME.equalsIgnoreCase(username)) {
+            throw new IllegalArgumentException("不能使用管理员用户名");
+        }
+
+        // 复用已有查询检查重名，同一用户保留原用户名时允许保存。
+        SysUser sameNameUser = mapper.findByUsername(username);
+        if (sameNameUser != null && !existingUser.getId().equals(sameNameUser.getId())) {
+            throw new IllegalArgumentException("用户名已存在");
+        }
+        return username;
     }
 
     /** 超级管理员为系统保底账号，不允许删除。 */

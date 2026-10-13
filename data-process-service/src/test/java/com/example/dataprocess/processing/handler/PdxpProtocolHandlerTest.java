@@ -29,6 +29,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.inOrder;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 
 /** PDXP协议直线处理流程测试。 */
 class PdxpProtocolHandlerTest {
@@ -66,9 +67,10 @@ class PdxpProtocolHandlerTest {
 
         // 核对校准、整帧和参数入库、消息发送的业务顺序。
         ArgumentCaptor<byte[]> sent = ArgumentCaptor.forClass(byte[].class);
+        ArgumentCaptor<byte[]> storedFrame = ArgumentCaptor.forClass(byte[].class);
         InOrder order = inOrder(calibration, storage, sender);
         order.verify(calibration).process(any(), any());
-        order.verify(storage).saveProcessedParameters(any(), any());
+        order.verify(storage).saveProcessedParameters(any(), any(), storedFrame.capture());
         order.verify(sender).send(sent.capture());
         TelemetryMessage message = TelemetryMessage.parseFrom(sent.getValue());
         assertEquals(4660, message.getTelemetriesOrThrow("TM010").getValue());
@@ -76,6 +78,9 @@ class PdxpProtocolHandlerTest {
         assertEquals("设备通道", message.getChannelName());
         assertEquals("业务001", message.getBussinessId());
         assertEquals("", message.getSatCode());
+        // 入库存完整采集帧，发送的Proto继续保存去头数据域，二者来源必须独立。
+        assertArrayEquals(datagram, storedFrame.getValue());
+        assertArrayEquals(new byte[]{0x34, 0x12}, message.getFrameRawData().toByteArray());
         verify(rpc, never()).process(any());
     }
 
@@ -94,7 +99,7 @@ class PdxpProtocolHandlerTest {
                 interfaceConfig(0), validPdxpDatagram()));
 
         verify(storageService, never()).savePdxpRawFrame(any(), any());
-        verify(storageService, never()).saveProcessedParameters(any(), any());
+        verify(storageService, never()).saveProcessedParameters(any(), any(), any());
         verify(messageService, never()).send(any());
         verify(rpcClient, never()).process(any());
     }
@@ -115,7 +120,7 @@ class PdxpProtocolHandlerTest {
                 interfaceConfig(1), invalidData));
 
         verify(storageService, never()).savePdxpRawFrame(any(), any());
-        verify(storageService, never()).saveProcessedParameters(any(), any());
+        verify(storageService, never()).saveProcessedParameters(any(), any(), any());
         verify(messageService, never()).send(any());
         verify(rpcClient, never()).process(any());
     }

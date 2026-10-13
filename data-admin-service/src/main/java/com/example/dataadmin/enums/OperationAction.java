@@ -11,6 +11,7 @@ public enum OperationAction {
     COLLECTION_PROTOCOLS_ENABLED("/collection/protocols/enabled", SystemLogSource.COLLECTION, "修改协议配置启用状态"),
     CALIBRATION_CHANNELS_CREATE("/calibration/channels/create", SystemLogSource.CALIBRATION, "创建校准通道"),
     CALIBRATION_CHANNELS_UPDATE("/calibration/channels/update", SystemLogSource.CALIBRATION, "修改校准通道"),
+    CALIBRATION_CHANNELS_ENABLED("/calibration/channels/enabled", SystemLogSource.CALIBRATION, "修改校准通道启用状态"),
     CALIBRATION_CHANNELS_DELETE("/calibration/channels/delete", SystemLogSource.CALIBRATION, "删除校准通道"),
     VISUALIZATION_WIDGETS_CREATE("/visualization/widgets/create", SystemLogSource.VISUALIZATION, "创建页面组件"),
     VISUALIZATION_WIDGETS_UPDATE("/visualization/widgets/update", SystemLogSource.VISUALIZATION, "修改页面组件"),

@@ -76,6 +76,12 @@ Content-Type: application/json
 
 前端可按固定周期并行轮询两个查询接口。接口速率从 Redis 秒级指标读取，历史采集量和处理量从金仓五秒统计表读取；查询时再按时间范围分桶，并按 `collect_interface_config.send_from` 聚合为发送方系统数据。
 
+两个总览接口的曲线统一采用“完整固定历史区间＋最新滚动区间”。`3h` 每点覆盖5分钟，共36点；`24h` 每点覆盖30分钟，共48点；`7d` 每点覆盖4小时，共42点。最后一个点始终统计最近一个完整跨度，不从当前固定区间起点重新累计。曲线截止时间为查询时刻减10秒再向下对齐5秒，为正常采样和落库留出缓冲；数据库故障或积压超过缓冲时，仍可能存在迟到数据。
+
+`lineChart.timePoints` 表示每个区间的结束时间，与各条 `series.values` 按下标对应。历史标签为 `HH:mm`，近7天为 `MM-dd HH:mm`；最新点标签分别为 `HH:mm:ss`、`MM-dd HH:mm:ss`。`lineChart.latestWindowStartTime` 和 `lineChart.latestWindowEndTime` 返回最新点的完整本地起止时间，区间左闭右开。例如10:07:03查询近3小时，最新点统计 `[10:01:50, 10:06:50)`。没有数据的区间保留0；暂无任何统计记录时，时间轴仍返回，`series` 为空数组。
+
+最新滚动区间可能与历史区间重叠，不能相加曲线值作为总量。卡片和表格仍按查询时刻向前3小时、24小时或7天的原始记录独立汇总，不扣除曲线的落库缓冲。历史首点使用完整固定区间，必要时补查查询边界前的数据，该部分不计入卡片和表格。
+
 ## 4. 用户管理
 
 | 方法 | 地址 | 说明 | 参数 |
@@ -89,6 +95,8 @@ Content-Type: application/json
 | POST | `/system/users/reset-password` | 重置密码 | JSON：`id`、`password` |
 
 `UserSaveRequest`：`id`、`username`、`password`、`nickname`、`phone`、`email`、`status`（0 停用/1 启用）、`roleId`。
+
+修改用户支持保存登录用户名 `username`：未传时保留原值；传入时去除首尾空格，不能为空或超过64个字符，不能与其他用户重名。管理员用户名不能修改，其他账号不能改名为 `admin`（不区分大小写）。修改成功后接口返回新用户名，后续使用新用户名和原密码登录；用户编号和基线平台绑定保持不变。
 
 用户列表和详情返回 `phone`、`email`、`baselineUserId`、`roleId`、`roleName`、`roleKey`，不会返回密码。新增或修改用户传入 `roleId` 时，服务会校验角色存在且启用；删除用户会同步清理用户角色关系。用户名为 `admin` 的本地管理员账号不能删除、停用或解除超级管理员关系。
 
@@ -327,11 +335,14 @@ RPC字段属性：`field`为`FrameRequest`字段名，`fieldName`为中文名称
 | GET | `/calibration/channels/{id}` | 校准通道详情 | 路径：`id` |
 | POST | `/calibration/channels/create` | 新增校准通道 | `ChannelSaveRequest` |
 | POST | `/calibration/channels/update` | 修改校准通道 | `ChannelSaveRequest`，`id` 必填 |
+| POST | `/calibration/channels/enabled` | 切换校准通道启用状态 | JSON：`taskId`、`id`、`enabled`（均必填，0禁用、1启用） |
 | POST | `/calibration/channels/delete` | 删除校准通道 | JSON：`id` |
 | GET | `/calibration/records` | 分页查询校准记录汇总 | 查询：`taskId`、`pageNum=1`、`pageSize=20` |
 | GET | `/calibration/records/{id}` | 查询记录汇总和分页野值详情 | 路径：`id`；查询：`taskId`、`pageNum=1`、`pageSize=20` |
 
-`ChannelSaveRequest`：`id`、`taskId`、`channelName`、`calibrationFormula`（校准公式，与每个遥测参数的 calibration_formula 对应）、`normalRange`（仅阈值法必填，其他算法可不填；填写时校验格式）、`detectMethod`（1 莱特准则/2 阈值法/3 肖维涅法）、`sigmaValue`（莱特准则σ倍数，1至5）、`fluctuationRate`（阈值百分比，大于0且不超过100）、`chauvenetCoef`（肖维涅判别常数，固定0.5）、`minSampleCount`（肖维涅法参与计算的最近样本数，不小于3）、`iterateCount`（肖维涅法迭代次数，1至3）、`sampleWindow`（莱特准则最近样本窗口，不小于3）、`dynamicUpdate`、`autoClean`（是否自动排除异常值）、`enabled`、`channelStatus`。只校验当前检测方法对应的专用参数。修改时不传正常范围保留原值；非阈值法传空字符串可清空正常范围。
+`ChannelSaveRequest`：`id`、`taskId`、`channelName`、`calibrationFormula`（校准公式，与每个遥测参数的 calibration_formula 对应）、`normalRange`（仅阈值法必填，其他算法可不填；填写时校验格式）、`detectMethod`（1 莱特准则/2 阈值法/3 肖维涅法）、`sigmaValue`（莱特准则σ倍数，1至5）、`fluctuationRate`（阈值百分比，大于0且不超过100）、`chauvenetCoef`（肖维涅判别常数，固定0.5）、`minSampleCount`（肖维涅法参与计算的最近样本数，不小于3）、`iterateCount`（肖维涅法迭代次数，1至3）、`sampleWindow`（莱特准则最近样本窗口，不小于3）、`dynamicUpdate`、`autoClean`（是否自动排除异常值）、`enabled`。只校验当前检测方法对应的专用参数。修改时不传正常范围保留原值；非阈值法传空字符串可清空正常范围。
+
+校准通道不再接收或返回 `channelStatus`、`channelStatusName`，枚举接口也不再返回通道状态选项。新增和修改仍支持 `enabled`；独立启用切换接口仅操作当前任务下未删除的通道，事务提交后通知处理模块刷新校准Map，同步成功后无需重启采集接口。禁用通道后保留历史记录，后续帧跳过该通道；野值检测还需开启任务的 `parameterRangeCheckEnabled`。
 
 新增校准通道时自动创建一条野值数量为 0 的校准记录。通道与记录一对一，野值详情与记录一对多；记录由数据处理流程维护，不提供手工新增、修改和删除接口。数据处理服务每 5 秒批量保存野值详情，并按全局唯一的校准通道 ID 累加汇总数量。
 
@@ -368,6 +379,14 @@ RPC字段属性：`field`为`FrameRequest`字段名，`fieldName`为中文名称
 系统日志页面只开放查询接口。日志新增由后台模块通过 `OperationLogService` 写入，不开放页面新增、修改或删除接口。
 
 ## 12. 调试建议
+
+### 遥测整帧异常记录
+
+IoTDB整帧路径保持为 `root.db.task_<任务节点>.device_<设备卫星ID>.tms.<遥测类型>._frame`，只保存 `deviceSatelliteName`、`channelName`、`raw`、`checkResultName` 四个测点；raw保存当前完整采集帧，顺序为传输头、PDXP包头、自定义数据、遥测数据、遥测帧头，时间使用帧时间。参数节点的raw仍保存参数原码，Proto的frame_raw_data仍保留去头数据域定义。成功生成Proto时，RPC返回的 `frame_check_status=false` 对应 `checkResultName=异常`，返回true时为正常；本地成功解析的结果为正常。参数越限和校准野值不改变整帧检查结果。
+
+本地参数解析失败或未生成结果时，若PDXP包和数据域已正确拆分，并且采集配置具有有效任务编号、设备卫星ID及“通道名称_业务标识”格式的设备名称，则允许没有Proto而保存异常整帧。设备名称来自运行配置，通道名称取首个下划线前的内容，原码保存包含传输头、PDXP包头、自定义数据和遥测帧头的当前完整采集帧，类型节点为 `device`，时间使用PDXP包头发送时间。该分支复用遥测入库线程池，只写完整异常 `_frame`，不写任何参数，不发布遥测消息，不计入成功处理量。身份不完整、无法拆分数据域、RPC调用失败及校准失败不使用此回退；入库队列满或写入失败会保留原始解析错误并另外记录存储告警。
+
+`GET /processing/realtime/telemetry` 可查询正常和异常整帧，`GET /processing/realtime/invalid` 仍按 `checkResultName != '正常'` 查询异常记录。两个接口返回字段不增加，rawLength与rawFrame分别展示完整帧字节数和完整帧十六进制原码；旧记录不会重新补头。`checkResultName` 返回中文“正常”或“异常”，旧数据中的其他非正常名称仍可被异常接口筛选。RPC异常Proto已有的参数入库和消息发布流程保持原有行为。
 
 ### 采集传输协议编号升级
 

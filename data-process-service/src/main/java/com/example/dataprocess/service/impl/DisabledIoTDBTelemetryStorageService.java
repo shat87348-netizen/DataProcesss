@@ -39,7 +39,7 @@ public class DisabledIoTDBTelemetryStorageService
         // IoTDB已禁用，本方法保留为空操作以维持原有处理流程。
     }
 
-    /** 跳过PDXP原始帧异常状态更新。 */
+    /** 存储禁用时跳过本地解析失败的异常整帧写入。 */
     @Override
     public void markPdxpRawFrameAbnormal(
             CollectInterfaceRuntimeConfig config,
@@ -59,7 +59,8 @@ public class DisabledIoTDBTelemetryStorageService
     @Override
     public void saveProcessedParameters(
             CollectInterfaceRuntimeConfig config,
-            TelemetryMessage message) {
+            TelemetryMessage message,
+            byte[] rawFrame) {
         // IoTDB已禁用，本方法保留为空操作以维持原有处理流程。
     }
 }

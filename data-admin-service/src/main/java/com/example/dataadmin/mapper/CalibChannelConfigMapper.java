@@ -26,5 +26,9 @@ public interface CalibChannelConfigMapper {
     int update(CalibChannelConfig entity);
     /** 按主键删除业务数据。 */
     int delete(@Param("id") Long id);
-    /** 更新启用状态。 */
+    /** 仅更新指定任务下未删除通道的启用状态。 */
+    int updateEnabled(
+            @Param("taskId") String taskId,
+            @Param("id") Long id,
+            @Param("enabled") Integer enabled);
 }

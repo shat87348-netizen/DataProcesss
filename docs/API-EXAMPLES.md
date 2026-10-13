@@ -41,7 +41,7 @@ Authorization: Bearer <token>
     "range": "3h", // 查询时间范围
     "sampleTime": "2026-08-27T10:30:01", // Redis实时指标最后更新时间
     "summary": { "onlineAgentCount": 6, "senderCount": 7, "collectionCount": 12500, "interfaceRateKbps": 7.81 },
-    "lineChart": { "timePoints": ["10:00"], "series": [{ "systemName": "实验综合控制系统", "values": [12500] }] },
+    "lineChart": { "timePoints": ["10:29:50"], "latestWindowStartTime": "2026-08-27T10:24:50", "latestWindowEndTime": "2026-08-27T10:29:50", "series": [{ "systemName": "实验综合控制系统", "values": [12500] }] }, // 仅展示最新点，实际近3小时返回36点
     "table": [{ "systemName": "实验综合控制系统", "interfaceCount": 3, "protocols": ["UDP", "TCP"], "collectionCount": 12500, "percentage": 100.0, "interfaceRateKbps": 7.81, "statusName": "在线" }]
   }
 }
@@ -49,7 +49,7 @@ Authorization: Bearer <token>
 
 ### `GET /dashboard/collection?taskId=TASK-20260908-001&range=24h`
 
-返回结构与近3小时查询一致，`range` 返回 `24h`，折线图按30分钟聚合近24小时数据。
+返回结构与近3小时查询一致，`range` 返回 `24h`，折线图共48点，历史点按完整30分钟固定区间聚合，最新点滚动统计最近30分钟。所有曲线点的横轴表示区间结束时间。
 
 ### `GET /dashboard/processing?taskId=TASK-20260908-001&range=3h`
 
@@ -64,7 +64,7 @@ Authorization: Bearer <token>
     "range": "3h", // 查询时间范围
     "sampleTime": "2026-08-27T10:30:01", // Redis实时指标最后更新时间
     "summary": { "unhandledAlarmCount": 30, "processedCount": 12480, "abnormalCount": 20 },
-    "lineChart": { "timePoints": ["10:00"], "series": [{ "systemName": "实验综合控制系统", "values": [12480] }] },
+    "lineChart": { "timePoints": ["10:29:50"], "latestWindowStartTime": "2026-08-27T10:24:50", "latestWindowEndTime": "2026-08-27T10:29:50", "series": [{ "systemName": "实验综合控制系统", "values": [12480] }] }, // 仅展示最新点，实际近3小时返回36点
     "table": [{ "systemName": "实验综合控制系统", "processedCount": 12480, "deduplicatedCount": 8, "abnormalCount": 20 }]
   }
 }
@@ -72,7 +72,13 @@ Authorization: Bearer <token>
 
 ### `GET /dashboard/processing?taskId=TASK-20260908-001&range=24h`
 
-返回结构与近3小时查询一致，`range` 返回 `24h`，折线图按30分钟聚合近24小时数据。
+返回结构与近3小时查询一致，`range` 返回 `24h`，折线图共48点，历史点按完整30分钟固定区间聚合，最新点滚动统计最近30分钟。所有曲线点的横轴表示区间结束时间。
+
+### `GET /dashboard/collection?taskId=TASK-20260908-001&range=7d` 与 `GET /dashboard/processing?taskId=TASK-20260908-001&range=7d`
+
+返回结构与近3小时查询一致，`range` 返回 `7d`。折线图共42点，历史点按完整4小时固定区间聚合，最新点滚动统计最近4小时。历史标签为 `MM-dd HH:mm`，最新标签保留秒数，格式为 `MM-dd HH:mm:ss`。
+
+三个范围的曲线均先扣除10秒落库缓冲，再向下对齐5秒统计窗口。例如10:07:03查询近3小时，最新点覆盖 `[10:01:50, 10:06:50)`；查询近24小时则覆盖 `[09:36:50, 10:06:50)`；查询近7天则覆盖 `[06:06:50, 10:06:50)`。最新区间与历史区间可能重叠，不能累加曲线值计算总量；卡片和表格保持原有汇总口径。缓冲仅覆盖正常落库延迟，数据库故障或积压时最新点仍可能随后补入迟到数据。
 
 ## 1. 登录认证
 
@@ -363,12 +369,14 @@ roleIds=20,21
 
 ### `POST /system/users/update`
 
+本例将登录用户名从 `operator` 改为 `operator_shift`。未传 `username` 时保留原值；传入时去除首尾空格，不能为空或超过64个字符，不能与其他用户重名。管理员用户名不能修改，其他账号不能改名为 `admin`（不区分大小写）。改名后使用新用户名和原密码登录。
+
 入参：
 
 ```jsonc
 {
   "id": 2, // 业务数据主键 ID
-  "username": "operator", // 登录用户名
+  "username": "operator_shift", // 修改后的登录用户名
   "nickname": "值班操作员", // 用户昵称
   "phone": "13800000002", // 联系电话
   "email": "operator@example.com", // 联系邮箱
@@ -385,7 +393,7 @@ roleIds=20,21
   "message": "操作成功", // 业务处理结果提示信息
   "data": { // 接口返回的业务数据
     "id": 2, // 业务数据主键 ID
-    "username": "operator", // 登录用户名
+    "username": "operator_shift", // 已保存的新登录用户名
     "nickname": "值班操作员", // 用户昵称
     "phone": "13800000002", // 联系电话
     "email": "operator@example.com", // 联系邮箱
@@ -945,7 +953,7 @@ UDP接口填写 `multicastIp` 时通过 `host` 指定的本机网卡加入该组
         "encoding": "UTF-8" // 协议字符编码
       },
       "parserClass": "com.example.JsonParser", // 协议解析器实现类的全限定名
-      "enabled": 1, // 是否启用通道：0否 1是。枚举：0 禁用，1 启用
+      "enabled": 1 // 是否启用通道：0否 1是。枚举：0 禁用，1 启用
     }
   ]
 }
@@ -974,7 +982,7 @@ UDP接口填写 `multicastIp` 时通过 `host` 指定的本机网卡加入该组
       "encoding": "UTF-8" // 协议字符编码
     },
     "parserClass": "com.example.JsonParser", // 协议解析器实现类的全限定名
-    "enabled": 1, // 是否启用通道：0否 1是。枚举：0 禁用，1 启用
+    "enabled": 1 // 是否启用通道：0否 1是。枚举：0 禁用，1 启用
   }
 }
 ```
@@ -1220,7 +1228,7 @@ FEP文件上传对象存储后发送的文件完成消息：
       "gridY": 0, // 组件左上角纵向网格坐标，从 0 开始
       "gridWidth": 6, // 组件占用的网格列数
       "gridHeight": 4, // 组件占用的网格行数
-      "enabled": 1, // 组件是否显示。枚举：0 隐藏，1 显示
+      "enabled": 1 // 组件是否显示。枚举：0 隐藏，1 显示
     }
   ]
 }
@@ -1249,7 +1257,7 @@ FEP文件上传对象存储后发送的文件完成消息：
     "gridY": 0, // 组件左上角纵向网格坐标，从 0 开始
     "gridWidth": 6, // 组件占用的网格列数
     "gridHeight": 4, // 组件占用的网格行数
-    "enabled": 1, // 组件是否显示。枚举：0 隐藏，1 显示
+    "enabled": 1 // 组件是否显示。枚举：0 隐藏，1 显示
   }
 }
 ```
@@ -1659,9 +1667,7 @@ file=@TMtable-A.txt
       "autoClean": 1, // 是否自动排除异常值：0否 1是。枚举：0 否，1 是
       "autoCleanName": "是", // 自动排除状态中文名称
       "enabled": 1, // 是否启用通道：0否 1是。枚举：0 禁用，1 启用
-      "enabledName": "启用", // 启用状态中文名称
-      "channelStatus": 1, // 通道状态：0停止 1正常 2异常。枚举：0 停止，1 正常，2 异常
-      "channelStatusName": "正常" // 通道运行状态中文名称
+      "enabledName": "启用" // 启用状态中文名称
     }
   ]
 }
@@ -1698,9 +1704,7 @@ file=@TMtable-A.txt
     "autoClean": 1, // 是否自动排除异常值：0否 1是。枚举：0 否，1 是
     "autoCleanName": "是", // 自动排除状态中文名称
     "enabled": 1, // 是否启用通道：0否 1是。枚举：0 禁用，1 启用
-    "enabledName": "启用", // 启用状态中文名称
-    "channelStatus": 1, // 通道状态：0停止 1正常 2异常。枚举：0 停止，1 正常，2 异常
-    "channelStatusName": "正常" // 通道运行状态中文名称
+    "enabledName": "启用" // 启用状态中文名称
   }
 }
 ```
@@ -1740,8 +1744,7 @@ file=@TMtable-A.txt
   "sampleWindow": 100, // 莱特准则使用的最近样本窗口
   "dynamicUpdate": 1, // 是否动态更新：0否 1是。枚举：0 否，1 是
   "autoClean": 1, // 是否自动排除异常值：0否 1是。枚举：0 否，1 是
-  "enabled": 1, // 是否启用通道：0否 1是。枚举：0 禁用，1 启用
-  "channelStatus": 1 // 通道状态：0停止 1正常 2异常。枚举：0 停止，1 正常，2 异常
+  "enabled": 1 // 是否启用通道：0否 1是。枚举：0 禁用，1 启用
 }
 ```
 
@@ -1775,8 +1778,7 @@ file=@TMtable-A.txt
   "sampleWindow": 100, // 莱特准则使用的最近样本窗口
   "dynamicUpdate": 1, // 是否动态更新：0否 1是。枚举：0 否，1 是
   "autoClean": 1, // 是否自动排除异常值：0否 1是。枚举：0 否，1 是
-  "enabled": 1, // 是否启用通道：0否 1是。枚举：0 禁用，1 启用
-  "channelStatus": 1 // 通道状态：0停止 1正常 2异常。枚举：0 停止，1 正常，2 异常
+  "enabled": 1 // 是否启用通道：0否 1是。枚举：0 禁用，1 启用
 }
 ```
 
@@ -1786,6 +1788,29 @@ file=@TMtable-A.txt
 {
   "code": 200, // 业务状态码，200 表示操作成功
   "message": "操作成功" // 业务处理结果提示信息
+}
+```
+
+### `POST /calibration/channels/enabled`
+
+入参（三个字段均必填）：
+
+```json
+{
+  "taskId": "TASK-20260908-001",
+  "id": 91,
+  "enabled": 1
+}
+```
+
+`taskId` 为外部试验任务编号，`id` 为该任务下未删除的校准通道主键；`enabled` 为 0 禁用、1 启用。只修改启用开关，其他配置和历史校准记录不变。保存后通知处理模块刷新内存配置，同步成功后无需重启采集接口；野值检测还需开启任务的 `parameterRangeCheckEnabled`。
+
+出参：
+
+```json
+{
+  "code": 200,
+  "message": "操作成功"
 }
 ```
 
@@ -2204,9 +2229,9 @@ GET /system/logs?taskId=TASK-20260908-001&logLevel=ERROR&logSource=COLLECTION&op
 
 每行生成一个 `Telemetry`，汇总为一帧 `TelemetryMessage`：`table_index` 对应 `tableIndex`，`tm_symbol` 和字典键对应 `telemetryCode`，`tm_name` 对应 `telemetryName`。该未配置公式类型的示例中，`value_type` 使用原码枚举；`value_text` 保存精确十进制值，`value` 使用协议的双精度数值（大整数可能产生舍入）；`raw_data` 保存低位对齐的小端字段原码，末字节高位补零。TM002的原码为 `79 01`。
 
-每个字段必须携带参数解析配置 `id`，处理时据此关联当前任务下的设备卫星信息；设备卫星 `code` 写入 `sat_code`，`name` 第一个 `_` 前写入 `channel_name`，后面写入 `bussiness_id`。每个字段自己的 `calibrationFormula` 写入对应遥测参数的 `calibration_formula`，不再作为帧级通道编号使用。消息头主题固定为试验数据，子主题固定为遥测物理值，消息来源为“数据处理”，任务主键来自当前采集接口，遥测类型固定为设备遥测。缺少配置、设备名称格式不正确、无效位宽、重复大表序号或数据不足时停止本帧后续处理，并回退保存完整PDXP原始包。同一帧存在相同遥测代号时保留最后一项，并把该参数的 `is_dep_value` 设置为 `true`。`frame_raw_data` 只保存去掉自定义头和遥测头后的中间遥测原码，时间使用PDXP发送时间，配置未覆盖的尾部位不生成参数。
+每个字段必须携带参数解析配置 `id`，处理时据此关联当前任务下的设备卫星信息；设备卫星 `code` 写入 `sat_code`，`name` 第一个 `_` 前写入 `channel_name`，后面写入 `bussiness_id`。每个字段自己的 `calibrationFormula` 写入对应遥测参数的 `calibration_formula`，不再作为帧级通道编号使用。消息头主题固定为试验数据，子主题固定为遥测物理值，消息来源为“数据处理”，任务主键来自当前采集接口，遥测类型固定为设备遥测。本地参数配置或解析失败时停止本帧后续处理；身份完整且数据域已成功拆分时只保存包含各类头的异常整帧，否则不写IoTDB。同一帧存在相同遥测代号时保留最后一项，并把该参数的 `is_dep_value` 设置为 `true`。`frame_raw_data` 只保存去掉自定义头和遥测头后的中间遥测原码，时间使用PDXP发送时间，配置未覆盖的尾部位不生成参数。
 
-正常PDXP帧处理成功后，整帧记录和全部遥测参数通过一次 `insertRecords` 批量写入IoTDB。整帧记录不再保存 `telemetryType`，参数记录不再保存 `source`；参数的状态索引测点命名为 `stateIndex`，未命中任何状态范围时不写入该测点。状态中文名称写入 `stateName`，`GET /processing/processed` 将其作为 `status` 返回，并同时返回允许为空的 `stateIndex`。`is_dep_value` 为 `true` 时 `deduplication` 写入“去重”，否则写入“原始”。IoTDB中的 `taskId` 按文本保存；`GET /processing/realtime/telemetry`、`GET /processing/processed` 和 `GET /processing/realtime/invalid` 均要求传入字符串任务编号，例如 `TASK-20260908-001`。解析失败时保存的PDXP完整原始包也会写入该任务编号。
+正常PDXP帧业务处理成功后，整帧记录和全部遥测参数通过一次 `insertRecords` 批量写入IoTDB，入库与MQ发布由独立结果线程池执行。整帧仅保存 `deviceSatelliteName`、`channelName`、`raw`、`checkResultName`；参数仅保存 `tmName`、`value`、`raw`、`stateName`、`processedAt`。任务编号和设备卫星ID位于路径中，不再作为测点重复保存。RPC帧检查失败写“异常”；本地参数解析失败只回退保存包含各类头的异常整帧，保留完整采集帧、不写参数、不发送遥测Proto。`GET /processing/processed` 将参数的 `stateName` 作为 `status` 返回；帧检查结果与参数状态、野值判定独立。
 
 ### 本地公式与类型示例
 
@@ -2222,24 +2247,26 @@ GET /system/logs?taskId=TASK-20260908-001&logLevel=ERROR&logSource=COLLECTION&op
 
 类型303：value保存从2000-01-01 12:00:00开始的0.1毫秒整数计数，valueType为VALUE_TYPE_TIME；例如计数10001对应valueText“2000-01-01 12:00:01.0001”。配置公式时，公式结果必须是整数计数，不按decimalPlaces舍入；直接在约定日历起点上累加，不作时区偏移。格式固定为yyyy-MM-dd HH:mm:ss.SSSS。
 
-非法公式、缺少系数、除零、数值溢出或非整数时间计数会终止当前帧后续处理，并由原有失败流程记录中文上下文及回退保存原始帧；不会用原码伪装成计算成功的物理量。
-### 实时遥测整帧新增身份字段
+非法公式、缺少系数、除零、数值溢出或非整数时间计数会终止当前帧后续处理，并记录中文错误上下文；身份完整且数据域可提取时只保存包含各类头的异常整帧；不会用原码伪装成计算成功的物理量。
+### 遥测整帧检查结果与查询
 
-`GET /processing/realtime/telemetry?taskId=TASK-20260908-001&interfaceId=12` 返回的每条记录在satelliteCode后增加satelliteName和channelCode：
+`GET /processing/realtime/telemetry?taskId=728101&deviceSatelliteId=11` 查询正常及异常整帧。当前记录示例：
 
 ```json
-{"interfaceId":12,"time":"2026-09-20T12:00:00","satelliteCode":"SAT-003","satelliteName":"试验卫星三号","channelCode":"CH-01","channelName":"发控台","rawLength":3,"rawFrame":"41 42 43","checkResult":1,"checkResultName":"正确"}
+{"deviceSatelliteId":11,"time":"2026-10-13T10:00:00","deviceSatelliteName":"设备通道_001","channelName":"设备通道","rawLength":46,"rawFrame":"34 12 80 01 00 01 00 00 00 01 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 37 26 00 2A 75 15 0C 00 05 04 03 02 01 41 42 43 01 00 00 00","checkResultName":"正常"}
 ```
 
-正常整帧的批量入库与单独原码入库均将Proto的satName写入satelliteName、channelCode写入同名测点，类型均为TEXT。channelName继续表示通道名称，channelCode表示通道编码。历史记录的新测点缺失时返回null；新消息未提供这两个字段时保存空字符串。当前本地处理未配置这两个字段的来源，因此保持为空；RPC消息按实际返回值保存。
+RPC消息的frame_check_status=false时，checkResultName写“异常”；true时写“正常”。本地成功解析的整帧写“正常”，参数越限或校准野值不会把整帧改为异常。
 
-### IoTDB帧检查字段与页面分页
+本地参数解析失败时，只要PDXP包和去头数据域已提取、任务编号和设备卫星ID有效、设备名称符合“通道名称_业务标识”，便通过已有入库线程池保存异常_frame。设备名称来自接口配置，通道名称取首个下划线前缀，raw保存传输头、PDXP包头、自定义数据、遥测数据和遥测帧头组成的完整帧，时间使用PDXP发送时间；不写参数、不发送遥测消息、不计入成功处理量。不能拆分数据域或缺少有效身份时，不创建占位路径；该回退仍要求报文和数据域可正确拆分。
 
-正常帧和异常帧在同一个`_frame`设备结构中统一保存`checkResult`和`checkResultName`，编码为0未知、1正确、2错误。上游`frameCheckStatus`为true时转换为正确，为false时转换为错误；实时遥测查询继续兼容历史记录中的`frameCheckStatus`。异常帧返回字段增加`satelliteName`和`channelName`，历史记录缺少对应测点时返回null。
+`GET /processing/realtime/invalid?taskId=728101&deviceSatelliteId=11` 按checkResultName不为“正常”分页查询，记录示例：
 
-`GET /processing/realtime/telemetry`、`GET /processing/processed`和`GET /processing/realtime/invalid`均增加`pageNum`和`pageSize`，默认分别为1和20，`pageSize`最大为200。响应`data`统一包含`pageNum`、`pageSize`、`total`和`records`。处理后参数查询使用所有参数统一保存的`valueText`作为`parameterValue`，避免不同物理量数据类型在IoTDB跨设备查询时发生冲突。
+```json
+{"deviceSatelliteId":11,"receiveTime":"2026-10-13T10:00:00","deviceSatelliteName":"设备通道_001","channelName":"设备通道","rawLength":46,"rawFrame":"34 12 80 01 00 01 00 00 00 01 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 37 26 00 2A 75 15 0C 00 05 04 03 02 01 41 42 43 01 00 00 00","checkResultName":"异常"}
+```
 
-IoTDB设备路径将任务编号和采集接口编号放在卫星之前，统一格式为`root.db.task_{taskId}.interface_{interfaceId}.{satelliteCode}.tms.{channelCode}.{tmType}.{node}`。整帧节点使用`_frame`，参数节点使用参数代号`tmSymbol`。查询端直接使用任务和接口路径前缀缩小设备范围，不再展开整个`root.db`后通过测点筛选任务和接口。
+两个整帧查询接口均支持pageNum、pageSize，设备卫星ID可选。IoTDB路径为`root.db.task_728101.device_11.tms.device._frame`，测点仅为deviceSatelliteName、channelName、raw、checkResultName；rawLength和十六进制rawFrame由包含各类头的完整帧派生。参数节点raw仍是参数原码，发送Proto的frame_raw_data仍是去头数据域。旧记录保持原有字节，不自动补头。任务节点含特殊字符时使用路径工具转换后的实际名称。处理后参数和曲线查询仍使用taskId、selectionType、targetId，并按保存的勾选参数并发查询，不接收整帧分页参数。
 
 ### `GET /alarms/findData`
 

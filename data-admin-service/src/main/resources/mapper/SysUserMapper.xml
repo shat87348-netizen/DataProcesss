@@ -75,13 +75,19 @@
         )
     </insert>
 
+    <!-- 用户名与资料统一更新，用户名为空时保留原值。 -->
     <update id="update" parameterType="com.example.dataadmin.entity.SysUser">
         update dp_user
-        set nickname = #{nickname},
+        <set>
+            <if test="username != null and username != ''">
+                username = #{username},
+            </if>
+            nickname = #{nickname},
             phone = #{phone},
             email = #{email},
             status = #{status},
             update_time = current_timestamp
+        </set>
         where id = #{id} and deleted = 0
     </update>
 

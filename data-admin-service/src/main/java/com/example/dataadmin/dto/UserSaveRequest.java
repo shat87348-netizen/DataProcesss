@@ -8,7 +8,7 @@ public class UserSaveRequest {
     /** 用户主键，修改时必填。 */
     private Long id;
 
-    /** 登录用户名。 */
+    /** 登录用户名；修改时未传保留原值，传入时不能为空，管理员用户名不能修改。 */
     private String username;
     /** 登录密码；新增必填，编辑时按接口规则处理。 */
     private String password;

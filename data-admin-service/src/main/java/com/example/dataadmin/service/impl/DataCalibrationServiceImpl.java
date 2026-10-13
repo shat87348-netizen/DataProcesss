@@ -127,6 +127,28 @@ public class DataCalibrationServiceImpl implements DataCalibrationService {
         return true;
     }
 
+    /** 独立切换通道开关，保持其他配置和历史校准记录不变。 */
+    @Override
+    @Transactional
+    public boolean updateChannelEnabled(String taskId, Long id, Integer enabled) {
+        // 第一步：校验必填任务编号及已有启用枚举，避免无效开关入库。
+        requireTaskId(taskId);
+        if (EnumData.labelOf(BusinessEnums.Enabled.values(), enabled) == null) {
+            throw new IllegalArgumentException("启用状态只能为0或1");
+        }
+        // 第二步：确认通道有效且属于当前任务，禁止跨任务切换。
+        CalibChannelConfig current = requireChannelConfig(id);
+        if (!taskId.equals(current.getTaskId())) {
+            throw new IllegalArgumentException("当前试验任务下的校准通道不存在");
+        }
+        // 第三步：通过任务和通道主键更新开关，并在事务提交后通知处理模块。
+        if (channelMapper.updateEnabled(taskId, id, enabled) <= 0) {
+            throw new IllegalArgumentException("校准通道启用状态修改失败");
+        }
+        runtimeSyncService.syncAfterCommit();
+        return true;
+    }
+
     /** 删除校准通道配置。 */
     @Override
     @Transactional
@@ -239,9 +261,6 @@ public class DataCalibrationServiceImpl implements DataCalibrationService {
         if (config.getEnabled() == null) {
             config.setEnabled(1);
         }
-        if (config.getChannelStatus() == null) {
-            config.setChannelStatus(1);
-        }
         if (config.getIsDeleted() == null) {
             config.setIsDeleted(0);
         }
@@ -309,9 +328,6 @@ public class DataCalibrationServiceImpl implements DataCalibrationService {
         if (source.getEnabled() != null) {
             target.setEnabled(source.getEnabled());
         }
-        if (source.getChannelStatus() != null) {
-            target.setChannelStatus(source.getChannelStatus());
-        }
     }
 
     /** 校验校准通道公共参数和所选检测方法的专用参数。 */
@@ -359,14 +375,10 @@ public class DataCalibrationServiceImpl implements DataCalibrationService {
             validateChauvenetConfig(config);
         }
 
-        // 公共开关和运行状态统一使用已有枚举范围。
+        // 公共开关校验取值范围。
         validateBinaryValue(config.getDynamicUpdate(), "动态更新状态");
         validateBinaryValue(config.getAutoClean(), "自动清洗状态");
         validateBinaryValue(config.getEnabled(), "启用状态");
-        if (EnumData.labelOf(BusinessEnums.ChannelStatus.values(),
-                config.getChannelStatus()) == null) {
-            throw new IllegalArgumentException("通道状态只能为0、1或2");
-        }
     }
 
     /** 校验正常范围格式以及上下边界顺序。 */

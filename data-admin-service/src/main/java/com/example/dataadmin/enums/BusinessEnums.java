@@ -174,16 +174,6 @@ public final class BusinessEnums {
         public String getLabel() { return label; }
     }
 
-    /** 校准通道状态。 */
-    public enum ChannelStatus implements LabeledEnum {
-        STOPPED(0, "停止"), NORMAL(1, "正常"), ABNORMAL(2, "异常");
-        private final int value;
-        private final String label;
-        ChannelStatus(int value, String label) { this.value = value; this.label = label; }
-        public Object getValue() { return value; }
-        public String getLabel() { return label; }
-    }
-
     /** 数据告警级别。 */
     public enum DataAlarmLevel implements LabeledEnum {
         GENERAL(2, "一般"), SERIOUS(4, "严重");

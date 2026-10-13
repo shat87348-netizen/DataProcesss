@@ -12,7 +12,7 @@ info:
     预期返回 HTTP 200，Access-Control-Allow-Origin 回显请求 Origin，Access-Control-Allow-Credentials 为 true；前端来源地址仅为示例，请按实际页面地址替换。
     本地类型示例：300或301在x=100、formulaDesc=y=a*x+b、processParam=0.02/1、decimalPlaces=2时，value为3，valueText为3.00；302按UTF-8解码至valueText，不执行公式；303的value为从2000-01-01 12:00:00起的0.1毫秒整数计数，valueText格式为yyyy-MM-dd HH:mm:ss.SSSS，计数10001对应2000-01-01 12:00:01.0001；不进行时区偏移。
     PDXP本地处理：rpcEnabled=0时，通过protocolConfigId取得configParams.fields，按tableIndex数字升序和bitWidth连续解码并组装遥测Protobuf消息；alarmFlag为1时命中状态范围写正常类型、stateIndex和stateName，未命中只写报警类型。
-    通过fields中的参数解析配置id关联当前任务下的设备卫星信息，本地处理不填写satCode，设备名称第一个下划线前后分别写入channelName和bussinessId；帧原码去掉数据域前5字节自定义数据和末尾4字节遥测头，按小端低位优先读取无符号原始整数x，按formulaType设置valueType：300为FLOAT、301为DOUBLE、302为TEXT、303为TIME，其他类型保留RAW。数值按formulaDesc计算，processParam用斜线分隔并依次绑定a、b等参数，decimalPlaces指定四舍五入小数位数。
+    通过fields中的参数解析配置id关联当前任务下的设备卫星信息，本地处理不填写satCode，设备名称第一个下划线前后分别写入channelName和bussinessId；Proto的frame_raw_data去掉数据域前5字节自定义数据和末尾4字节遥测头，IoTDB整帧raw则保留完整采集帧及各类头，按小端低位优先读取无符号原始整数x，按formulaType设置valueType：300为FLOAT、301为DOUBLE、302为TEXT、303为TIME，其他类型保留RAW。数值按formulaDesc计算，processParam用斜线分隔并依次绑定a、b等参数，decimalPlaces指定四舍五入小数位数。
     示例：遥测数据为CD AB，三行配置(tableIndex, telemetryCode, bitWidth)为(1, TM001, 3)、(2, TM002, 9)、(3, TM003, 4)，对应原始值为5、377、10，汇总为一帧TelemetryMessage。
     每项Telemetry的table_index取tableIndex、tm_symbol及字典键取telemetryCode；未配置公式类型时value为原始数值、value_text为精确十进制文本、value_type为原码；配置300至303时按对应规则生成物理量或文本，raw_data为低位对齐的小端字段字节。
   version: 2.8.0
@@ -376,7 +376,6 @@ paths:
                   dynamicUpdate: [{ value: 0, label: "否" }, { value: 1, label: "是" }]
                   autoClean: [{ value: 0, label: "否" }, { value: 1, label: "是" }]
                   enabled: [{ value: 0, label: "禁用" }, { value: 1, label: "启用" }]
-                  channelStatus: [{ value: 0, label: "停止" }, { value: 1, label: "正常" }, { value: 2, label: "异常" }]
                   isOutlier: [{ value: 0, label: "否" }, { value: 1, label: "是" }]
 
   /alarms/findData:
@@ -670,6 +669,7 @@ paths:
     get:
       tags: [总览]
       summary: 查询数据采集总览（Redis实时指标与金仓历史曲线）
+      description: "历史曲线点为完整固定区间，最新点滚动统计最近5分钟、30分钟或4小时；截止时间扣除10秒落库缓冲并向下对齐5秒。横轴表示区间结束时间，最新点保留秒数；最新点可与历史区间重叠，不能累加曲线值计算总量。"
       parameters:
         - { name: taskId, in: query, required: false, schema: { type: string } }
         - name: range
@@ -692,6 +692,7 @@ paths:
     get:
       tags: [总览]
       summary: 查询数据处理总览（按发送方展示曲线和表格）
+      description: "历史曲线点为完整固定区间，最新点滚动统计最近5分钟、30分钟或4小时；截止时间扣除10秒落库缓冲并向下对齐5秒。横轴表示区间结束时间，最新点保留秒数；卡片和表格仍按原始查询范围独立汇总。"
       parameters:
         - { name: taskId, in: query, required: false, schema: { type: string } }
         - name: range
@@ -870,6 +871,7 @@ paths:
     post:
       tags: [用户管理]
       summary: 修改用户
+      description: "支持修改登录用户名；未传 username 时保留原值，传入时去除首尾空格，不能为空或超过64个字符，不能与其他用户重名。管理员用户名不能修改，其他账号不能改名为 admin（不区分大小写）。修改成功后使用新用户名和原密码登录，用户编号和基线平台绑定保持不变。"
       requestBody:
         required: true
         content:
@@ -913,7 +915,7 @@ paths:
                   format: int64
             example:
               id: 2
-              username: "operator"
+              username: "operator_shift"
               nickname: "值班操作员"
               phone: "13800000002"
               email: "operator@example.com"
@@ -2951,7 +2953,7 @@ paths:
     get:
       tags: [数据处理]
       summary: 查询实时遥测数据
-      description: 从IoTDB任务及设备卫星路径按时间倒序查询最终Proto整帧；原码为去除自定义头和遥测头后的数据域。
+      description: "查询IoTDB整帧，包括正常处理结果及本地参数解析失败时保存的完整异常帧。RPC的frame_check_status=false写异常，true写正常；本地成功解析写正常。本地参数解析失败只保存异常整帧，不写参数、不发布消息，前提是PDXP包、数据域及任务设备通道身份完整。"
       parameters:
         - $ref: '#/components/parameters/RequiredTaskId'
         - name: deviceSatelliteId
@@ -2969,7 +2971,7 @@ paths:
     get:
       tags: [数据处理]
       summary: 查询帧检查异常数据
-      description: 从IoTDB的_frame节点筛选检查结果名称不为正常的最终整帧。
+      description: "仅查询checkResultName不为正常的整帧，包含RPC帧检查失败及已入库的本地参数解析失败帧；缺少有效身份或无法正确拆分数据域的报文不会按此结构入库。历史非正常名称仍可查出。"
       parameters:
         - $ref: '#/components/parameters/RequiredTaskId'
         - name: deviceSatelliteId
@@ -3667,23 +3669,6 @@ paths:
                     - value: 1
                       name: "启用"
                       description: "1 表示启用"
-                channelStatus:
-                  type: integer
-                  description: "通道状态：0停止 1正常 2异常。枚举：0 停止，1 正常，2 异常"
-                  enum:
-                    - 0
-                    - 1
-                    - 2
-                  x-apifox-enum:
-                    - value: 0
-                      name: "停止"
-                      description: "0 表示停止"
-                    - value: 1
-                      name: "正常"
-                      description: "1 表示正常"
-                    - value: 2
-                      name: "异常"
-                      description: "2 表示异常"
             example:
               taskId: "TASK-20260908-001"
               channelName: "温度通道1"
@@ -3699,7 +3684,6 @@ paths:
               dynamicUpdate: 1
               autoClean: 1
               enabled: 1
-              channelStatus: 1
       responses:
         '200':
           $ref: '#/components/responses/Success063'
@@ -3808,23 +3792,6 @@ paths:
                     - value: 1
                       name: "启用"
                       description: "1 表示启用"
-                channelStatus:
-                  type: integer
-                  description: "通道状态：0停止 1正常 2异常。枚举：0 停止，1 正常，2 异常"
-                  enum:
-                    - 0
-                    - 1
-                    - 2
-                  x-apifox-enum:
-                    - value: 0
-                      name: "停止"
-                      description: "0 表示停止"
-                    - value: 1
-                      name: "正常"
-                      description: "1 表示正常"
-                    - value: 2
-                      name: "异常"
-                      description: "2 表示异常"
             example:
               id: 91
               taskId: "TASK-20260908-001"
@@ -3841,7 +3808,46 @@ paths:
               dynamicUpdate: 1
               autoClean: 1
               enabled: 1
-              channelStatus: 1
+      responses:
+        '200':
+          $ref: '#/components/responses/Success064'
+
+  /calibration/channels/enabled:
+    post:
+      tags: [数据校准]
+      summary: 切换校准通道启用状态
+      description: 仅操作指定任务下未删除的校准通道。1启用、0禁用；事务提交后通知数据处理模块刷新校准配置，同步成功后无需重启采集接口。历史校准记录和野值详情保持不变；野值检测还需开启任务的参数值范围检查开关。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [taskId, id, enabled]
+              properties:
+                taskId:
+                  type: string
+                  minLength: 1
+                  description: "外部试验任务编号，必须与校准通道所属任务一致"
+                id:
+                  type: integer
+                  format: int64
+                  description: "校准通道主键ID"
+                enabled:
+                  type: integer
+                  description: "是否启用校准通道：0禁用，1启用"
+                  enum: [0, 1]
+                  x-apifox-enum:
+                    - value: 0
+                      name: "禁用"
+                      description: "0表示禁用"
+                    - value: 1
+                      name: "启用"
+                      description: "1表示启用"
+            example:
+              taskId: "TASK-20260908-001"
+              id: 91
+              enabled: 1
       responses:
         '200':
           $ref: '#/components/responses/Success064'
@@ -5214,8 +5220,16 @@ components:
           properties:
             timePoints:
               type: array
-              description: "横轴时间点，与每条曲线的values按下标对应"
+              description: "统计区间结束时间，与values按下标对应；3h共36点、24h共48点、7d共42点。历史点为HH:mm，7d为MM-dd HH:mm；最新滚动点分别为HH:mm:ss和MM-dd HH:mm:ss。"
               items: { type: string }
+            latestWindowStartTime:
+              type: string
+              description: "最新滚动点的统计起点，包含此时刻；使用完整本地时间，不附带时区。3h、24h、7d分别覆盖5分钟、30分钟、4小时。"
+              example: "2026-09-09T10:24:50"
+            latestWindowEndTime:
+              type: string
+              description: "最新滚动点的统计截止时间，不包含此时刻；当前时间减10秒再向下对齐5秒，使用完整本地时间，不附带时区。缓冲仅覆盖正常落库延迟，不保证故障积压已经写完。"
+              example: "2026-09-09T10:29:50"
             series:
               type: array
               description: "各发送方系统的采集量曲线"
@@ -5225,7 +5239,7 @@ components:
                   systemName: { type: string, description: "发送方系统名称" }
                   values:
                     type: array
-                    description: "各时间点内累计的采集条数"
+                    description: "各区间累计的采集条数；最后一个值为完整跨度的滚动统计，与历史区间可能重叠，不能累加作为卡片或表格总量。无数据区间返回0。"
                     items: { type: integer, format: int64 }
         table:
           type: array
@@ -5284,8 +5298,16 @@ components:
           properties:
             timePoints:
               type: array
-              description: "横轴时间点，与每条曲线的values按下标对应"
+              description: "统计区间结束时间，与values按下标对应；3h共36点、24h共48点、7d共42点。历史点为HH:mm，7d为MM-dd HH:mm；最新滚动点分别为HH:mm:ss和MM-dd HH:mm:ss。"
               items: { type: string }
+            latestWindowStartTime:
+              type: string
+              description: "最新滚动点的统计起点，包含此时刻；使用完整本地时间，不附带时区。3h、24h、7d分别覆盖5分钟、30分钟、4小时。"
+              example: "2026-09-09T10:24:50"
+            latestWindowEndTime:
+              type: string
+              description: "最新滚动点的统计截止时间，不包含此时刻；当前时间减10秒再向下对齐5秒，使用完整本地时间，不附带时区。缓冲仅覆盖正常落库延迟，不保证故障积压已经写完。"
+              example: "2026-09-09T10:29:50"
             series:
               type: array
               description: "各发送方系统的处理量曲线"
@@ -5295,7 +5317,7 @@ components:
                   systemName: { type: string, description: "发送方系统名称" }
                   values:
                     type: array
-                    description: "各时间点内累计的处理条数；PDXP以业务处理完成且两个异步结果任务均提交成功为准"
+                    description: "各区间累计的处理条数；最后一个值为完整跨度的滚动统计，与历史区间可能重叠，不能累加作为总量。无数据区间返回0；PDXP以业务处理完成且两个异步结果任务均提交成功为准。"
                     items: { type: integer, format: int64 }
         table:
           type: array
@@ -5499,7 +5521,10 @@ components:
                     collectionCount: 12500
                     interfaceRateKbps: 1562.5
                   lineChart:
-                    timePoints: ["10:20", "10:25", "10:30"]
+                    # 示例仅展示末尾三个点，实际近三小时返回三十六点。
+                    timePoints: ["10:20", "10:25", "10:29:50"]
+                    latestWindowStartTime: "2026-09-09T10:24:50"
+                    latestWindowEndTime: "2026-09-09T10:29:50"
                     series:
                       - systemName: "实验综合控制系统"
                         values: [760, 820, 790]
@@ -5544,7 +5569,10 @@ components:
                     collectionCount: 92800
                     interfaceRateKbps: 1562.5
                   lineChart:
-                    timePoints: ["09:30", "10:00", "10:30"]
+                    # 示例仅展示末尾三个点，实际近二十四小时返回四十八点。
+                    timePoints: ["09:30", "10:00", "10:29:50"]
+                    latestWindowStartTime: "2026-09-09T09:59:50"
+                    latestWindowEndTime: "2026-09-09T10:29:50"
                     series:
                       - systemName: "实验综合控制系统"
                         values: [4380, 4720, 4510]
@@ -5600,7 +5628,10 @@ components:
                     processedCount: 12410
                     abnormalCount: 38
                   lineChart:
-                    timePoints: ["10:20", "10:25", "10:30"]
+                    # 示例仅展示末尾三个点，实际近三小时返回三十六点。
+                    timePoints: ["10:20", "10:25", "10:29:50"]
+                    latestWindowStartTime: "2026-09-09T10:24:50"
+                    latestWindowEndTime: "2026-09-09T10:29:50"
                     series:
                       - systemName: "实验综合控制系统"
                         values: [753, 812, 782]
@@ -5635,7 +5666,10 @@ components:
                     processedCount: 91930
                     abnormalCount: 318
                   lineChart:
-                    timePoints: ["09:30", "10:00", "10:30"]
+                    # 示例仅展示末尾三个点，实际近二十四小时返回四十八点。
+                    timePoints: ["09:30", "10:00", "10:29:50"]
+                    latestWindowStartTime: "2026-09-09T09:59:50"
+                    latestWindowEndTime: "2026-09-09T10:29:50"
                     series:
                       - systemName: "实验综合控制系统"
                         values: [4312, 4650, 4438]
@@ -6112,7 +6146,7 @@ components:
             message: "操作成功"
             data:
               id: 2
-              username: "operator"
+              username: "operator_shift"
               nickname: "值班操作员"
               phone: "13800000002"
               status: 1
@@ -8025,9 +8059,9 @@ components:
                         time: { type: string, format: date-time, description: "遥测时间" }
                         deviceSatelliteName: { type: string, description: "导入工作表名称" }
                         channelName: { type: string, description: "通道名称" }
-                        rawLength: { type: integer, description: "去除PDXP自定义头和遥测头后的原码字节数" }
-                        rawFrame: { type: string, description: "大写十六进制遥测数据原码" }
-                        checkResultName: { type: string, description: "帧检查结果中文名称" }
+                        rawLength: { type: integer, description: "完整采集帧字节数，包含传输头、PDXP包头、自定义数据和遥测帧头；旧记录保持原格式" }
+                        rawFrame: { type: string, description: "包含各类头的完整采集帧大写十六进制原码；旧记录保持原格式" }
+                        checkResultName: { type: string, enum: [正常, 异常], description: "帧检查结果：RPC检查失败或本地参数解析失败为异常，其余已生成的有效结果为正常；历史非正常名称仍可能返回" }
           example:
             code: 200
             message: "操作成功"
@@ -8037,11 +8071,11 @@ components:
               total: 1
               records:
                 - deviceSatelliteId: 12
-                  time: "2026-08-06T15:01:38"
+                  time: "2026-10-13T10:00:00"
                   deviceSatelliteName: "发控台_05"
                   channelName: "发控台"
-                  rawLength: 247
-                  rawFrame: "3E A7 43 FA 02 EC 09 29"
+                  rawLength: 46
+                  rawFrame: "34 12 80 01 00 01 00 00 00 01 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 37 26 00 2A 75 15 0C 00 05 04 03 02 01 41 42 43 01 00 00 00"
                   checkResultName: "正常"
 
     InvalidTelemetryList:
@@ -8067,10 +8101,10 @@ components:
                         deviceSatelliteId: { type: integer, format: int64, description: "设备卫星主键" }
                         receiveTime: { type: string, format: date-time, description: "遥测时间" }
                         deviceSatelliteName: { type: string, description: "导入工作表名称" }
-                        channelName: { type: string, description: "Proto通道名称" }
-                        checkResultName: { type: string, description: "帧检查结果中文名称" }
-                        rawLength: { type: integer, description: "数据域原码字节数" }
-                        rawFrame: { type: string, description: "数据域原码十六进制文本" }
+                        channelName: { type: string, description: "Proto通道名称；本地解析失败时取设备名称首个下划线前缀" }
+                        checkResultName: { type: string, enum: [正常, 异常], description: "帧检查结果：RPC检查失败或本地参数解析失败为异常，其余已生成的有效结果为正常；历史非正常名称仍可能返回" }
+                        rawLength: { type: integer, description: "完整采集帧字节数，包含传输头、PDXP包头、自定义数据和遥测帧头；旧记录保持原格式" }
+                        rawFrame: { type: string, description: "包含各类头的完整采集帧大写十六进制原码；旧记录保持原格式" }
           example:
             code: 200
             message: "操作成功"
@@ -8080,12 +8114,12 @@ components:
               total: 1
               records:
                 - deviceSatelliteId: 12
-                  receiveTime: "2026-08-18T16:20:00"
+                  receiveTime: "2026-10-13T10:00:00"
                   deviceSatelliteName: "发控台_05"
                   channelName: "发控台"
-                  checkResultName: "错误"
-                  rawLength: 256
-                  rawFrame: "3E A7 43 FA 02 EC 09 29"
+                  checkResultName: "异常"
+                  rawLength: 46
+                  rawFrame: "34 12 80 01 00 01 00 00 00 01 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 37 26 00 2A 75 15 0C 00 05 04 03 02 01 41 42 43 01 00 00 00"
 
     ProcessedTelemetryList:
       description: 操作成功
@@ -8287,23 +8321,6 @@ components:
                         - value: 1
                           name: "启用"
                           description: "1 表示启用"
-                    channelStatus:
-                      type: integer
-                      description: "通道状态：0停止 1正常 2异常。枚举：0 停止，1 正常，2 异常"
-                      enum:
-                        - 0
-                        - 1
-                        - 2
-                      x-apifox-enum:
-                        - value: 0
-                          name: "停止"
-                          description: "0 表示停止"
-                        - value: 1
-                          name: "正常"
-                          description: "1 表示正常"
-                        - value: 2
-                          name: "异常"
-                          description: "2 表示异常"
                     detectMethodName:
                       type: string
                       description: "野值检测方法中文名称"
@@ -8316,9 +8333,6 @@ components:
                     enabledName:
                       type: string
                       description: "启用状态中文名称"
-                    channelStatusName:
-                      type: string
-                      description: "通道运行状态中文名称"
           example:
             code: 200
             message: "操作成功"
@@ -8342,9 +8356,6 @@ components:
                 autoCleanName: "是"
                 enabled: 1
                 enabledName: "启用"
-                channelStatus: 1
-                channelStatusName: "正常"
-
     Success062:
       description: 操作成功
       content:
@@ -8455,23 +8466,6 @@ components:
                       - value: 1
                         name: "启用"
                         description: "1 表示启用"
-                  channelStatus:
-                    type: integer
-                    description: "通道状态：0停止 1正常 2异常。枚举：0 停止，1 正常，2 异常"
-                    enum:
-                      - 0
-                      - 1
-                      - 2
-                    x-apifox-enum:
-                      - value: 0
-                        name: "停止"
-                        description: "0 表示停止"
-                      - value: 1
-                        name: "正常"
-                        description: "1 表示正常"
-                      - value: 2
-                        name: "异常"
-                        description: "2 表示异常"
                   detectMethodName:
                     type: string
                     description: "野值检测方法中文名称"
@@ -8484,9 +8478,6 @@ components:
                   enabledName:
                     type: string
                     description: "启用状态中文名称"
-                  channelStatusName:
-                    type: string
-                    description: "通道运行状态中文名称"
           example:
             code: 200
             message: "操作成功"
@@ -8510,9 +8501,6 @@ components:
               autoCleanName: "是"
               enabled: 1
               enabledName: "启用"
-              channelStatus: 1
-              channelStatusName: "正常"
-
     Success063:
       description: 操作成功
       content:

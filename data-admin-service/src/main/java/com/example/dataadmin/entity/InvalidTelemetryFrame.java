@@ -2,7 +2,7 @@ package com.example.dataadmin.entity;
 
 import java.time.LocalDateTime;
 
-/** 帧检查结果不为正常的最终整帧。 */
+/** 帧检查结果不为正常的完整采集帧，包括本地参数解析失败的帧。 */
 public class InvalidTelemetryFrame {
     /** 设备卫星主键。 */
     private Long deviceSatelliteId;
@@ -10,13 +10,13 @@ public class InvalidTelemetryFrame {
     private LocalDateTime receiveTime;
     /** 导入工作表名称。 */
     private String deviceSatelliteName;
-    /** Proto通道名称。 */
+    /** Proto通道名称；本地解析失败时取设备名称的下划线前缀。 */
     private String channelName;
     /** 帧检查结果中文名称。 */
     private String checkResultName;
-    /** 数据域原码字节数。 */
+    /** 完整帧原码字节数，包含各类头。 */
     private Integer rawLength;
-    /** 数据域原码十六进制文本。 */
+    /** 包含各类头的完整帧原码十六进制文本。 */
     private String rawFrame;
 
     public Long getDeviceSatelliteId() { return deviceSatelliteId; }

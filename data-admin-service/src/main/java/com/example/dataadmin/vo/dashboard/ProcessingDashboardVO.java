@@ -92,8 +92,14 @@ public class ProcessingDashboardVO {
 
   /** 折线图横轴和数据序列。 */
   public static class LineChart {
-    /** 横轴时间点，顺序与每条序列的values严格对应。 */
+    /** 各统计区间的结束时间，最后一个滚动点保留秒数，与序列值严格对应。 */
     private List<String> timePoints = new ArrayList<>();
+
+    /** 最新滚动点的统计起点，使用完整本地时间，包含此时刻。 */
+    private String latestWindowStartTime;
+
+    /** 最新滚动点的统计截止时间，使用完整本地时间，不包含此时刻。 */
+    private String latestWindowEndTime;
 
     /** 每个发送方的一条处理量曲线。 */
     private List<Series> series = new ArrayList<>();
@@ -104,6 +110,26 @@ public class ProcessingDashboardVO {
 
     public void setTimePoints(List<String> v) {
       timePoints = v;
+    }
+
+    /** 返回最新滚动点的统计起点，供前端展示实际覆盖范围。 */
+    public String getLatestWindowStartTime() {
+      return latestWindowStartTime;
+    }
+
+    /** 设置最新滚动点的统计起点。 */
+    public void setLatestWindowStartTime(String v) {
+      latestWindowStartTime = v;
+    }
+
+    /** 返回扣除落库缓冲后的最新统计截止时间。 */
+    public String getLatestWindowEndTime() {
+      return latestWindowEndTime;
+    }
+
+    /** 设置最新滚动点的统计截止时间。 */
+    public void setLatestWindowEndTime(String v) {
+      latestWindowEndTime = v;
     }
 
     public List<Series> getSeries() {

@@ -74,7 +74,6 @@ public final class ControllerEnumData {
         EnumData.add(data, "dynamicUpdate", BusinessEnums.YesNo.values());
         EnumData.add(data, "autoClean", BusinessEnums.YesNo.values());
         EnumData.add(data, "enabled", BusinessEnums.Enabled.values());
-        EnumData.add(data, "channelStatus", BusinessEnums.ChannelStatus.values());
         EnumData.add(data, "isOutlier", BusinessEnums.YesNo.values());
         return data;
     }

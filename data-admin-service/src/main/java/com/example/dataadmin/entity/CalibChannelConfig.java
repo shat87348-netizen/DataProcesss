@@ -41,8 +41,6 @@ public class CalibChannelConfig {
     private Integer autoClean;
     /** 是否启用通道：0否 1是。 */
     private Integer enabled;
-    /** 通道状态：0停止 1正常 2异常。 */
-    private Integer channelStatus;
     /** 是否删除：0否 1是。 */
     private Integer isDeleted;
     /** 创建时间。 */
@@ -188,19 +186,6 @@ public class CalibChannelConfig {
     /** 返回通道启用状态中文名称。 */
     public String getEnabledName() {
         return EnumData.labelOf(BusinessEnums.Enabled.values(), enabled);
-    }
-
-    public Integer getChannelStatus() {
-        return channelStatus;
-    }
-
-    public void setChannelStatus(Integer channelStatus) {
-        this.channelStatus = channelStatus;
-    }
-
-    /** 返回通道运行状态中文名称。 */
-    public String getChannelStatusName() {
-        return EnumData.labelOf(BusinessEnums.ChannelStatus.values(), channelStatus);
     }
 
     public Integer getIsDeleted() {

@@ -4,6 +4,7 @@ import SatDataCenter.DataExchange.TmTc.TelemetryMessages.TelemetryMessage;
 import com.example.common.enums.DataAlarmType;
 import com.example.dataprocess.config.DataProcessingThreadPoolConfig;
 import com.example.dataprocess.entity.CollectInterfaceRuntimeConfig;
+import com.example.dataprocess.tool.PdxpParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeanUtils;
@@ -74,18 +75,33 @@ public class TelemetryResultDispatcher {
 
     /** 两个任务均被接受后返回成功，不等待入库或发送完成。 */
     public boolean submit(CollectInterfaceRuntimeConfig config,
-            TelemetryMessage message, long sequenceNumber) {
+            TelemetryMessage message, PdxpParser.PdxpPacket packet) {
         // 第一步：复制接口上下文，避免排队期间接口配置更新改变任务和设备身份。
         CollectInterfaceRuntimeConfig snapshot = new CollectInterfaceRuntimeConfig();
         BeanUtils.copyProperties(config, snapshot);
-        // 第二步：不可变遥测消息由两个任务共享，互相独立提交，即使一方拒绝也尝试另一方。
+        // 第二步：复制完整采集帧供入库使用，发送消息继续使用原Proto数据域。
+        byte[] rawFrame = packet.getRawPacket();
+        long sequenceNumber = packet.getSequenceNumber();
+        // 第三步：两个任务独立提交，即使一方拒绝也尝试另一方。
         boolean storageAccepted = execute(storageExecutor, snapshot, sequenceNumber,
                 DataAlarmType.STORAGE_FAILURE, "遥测入库", () ->
-                        storageService.saveProcessedParameters(snapshot, message));
+                        storageService.saveProcessedParameters(snapshot, message, rawFrame));
         boolean messageAccepted = execute(messageExecutor, snapshot, sequenceNumber,
                 DataAlarmType.MESSAGE_FAILURE, "遥测消息发送", () ->
                         messageService.send(message.toByteArray()));
         return storageAccepted && messageAccepted;
+    }
+
+    /** 本地解析失败时只向已有入库线程池提交异常整帧，不创建消息发送任务。 */
+    public boolean submitAbnormalLocalFrame(CollectInterfaceRuntimeConfig config,
+            PdxpParser.PdxpPacket packet) {
+        // 第一步：固定本帧任务和设备身份，避免接口配置在排队期间变化。
+        CollectInterfaceRuntimeConfig snapshot = new CollectInterfaceRuntimeConfig();
+        BeanUtils.copyProperties(config, snapshot);
+        // 第二步：复用队列拒绝、存储异常和告警处理，不阻塞参数解析线程。
+        return execute(storageExecutor, snapshot, packet.getSequenceNumber(),
+                DataAlarmType.STORAGE_FAILURE, "本地异常整帧入库", () ->
+                        storageService.markPdxpRawFrameAbnormal(snapshot, packet));
     }
 
     /** 将执行失败与提交失败分别记录，拒绝策略不会回退到处理线程。 */

@@ -21,6 +21,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -33,6 +34,10 @@ public class DashboardServiceImpl implements DashboardService {
   private static final String PROCESSING_KEY_PREFIX = "dashboard:processing:current:";
   /** 处理指标中未处理告警数量的字段名。 */
   private static final String UNHANDLED_ALARM_FIELD = "unhandledAlarmCount";
+  /** 数据库统计窗口为五秒，曲线截止时间必须对齐窗口边界。 */
+  private static final long STATISTICS_WINDOW_SECONDS = 5L;
+  /** 为秒级采样和五秒落库任务预留十秒缓冲，不代表故障时的落库完成水位。 */
+  private static final long CHART_FLUSH_BUFFER_SECONDS = 10L;
 
   private final DashboardMapper mapper;
   private final StringRedisTemplate redisTemplate;
@@ -50,10 +55,14 @@ public class DashboardServiceImpl implements DashboardService {
     RangeSpec spec = range(range);
     List<CollectInterfaceConfig> interfaces = mapper.findInterfaces(taskId);
     List<CollectInterfaceStatistics> points =
-        mapper.findCollectionStatisticsRange(taskId, spec.start);
+        mapper.findCollectionStatisticsRange(taskId, spec.queryStart);
+    // 曲线可能额外查询边界前的数据，卡片和表格仍只汇总原始查询范围。
+    List<CollectInterfaceStatistics> summaryPoints = points.stream()
+        .filter(point -> !point.getStatisticsTime().isBefore(spec.start))
+        .collect(Collectors.toList());
     Map<Long, RealtimeCollectionMetric> realtime = collectionRealtime(taskId);
     Map<Long, CollectInterfaceConfig> interfaceMap = interfaceMap(interfaces);
-    Map<String, Long> totals = collectionTotals(points, interfaceMap);
+    Map<String, Long> totals = collectionTotals(summaryPoints, interfaceMap);
 
     CollectionDashboardVO result = new CollectionDashboardVO();
     result.setTaskId(taskId);
@@ -76,7 +85,11 @@ public class DashboardServiceImpl implements DashboardService {
     RangeSpec spec = range(range);
     List<CollectInterfaceConfig> interfaces = mapper.findInterfaces(taskId);
     List<DataProcessingStatistics> points =
-        mapper.findProcessingStatisticsRange(taskId, spec.start);
+        mapper.findProcessingStatisticsRange(taskId, spec.queryStart);
+    // 最新滚动点允许与历史点重叠，总量必须按原始记录独立计算。
+    List<DataProcessingStatistics> summaryPoints = points.stream()
+        .filter(point -> !point.getStatisticsTime().isBefore(spec.start))
+        .collect(Collectors.toList());
     ProcessingRealtime realtime = processingRealtime(taskId);
 
     ProcessingDashboardVO result = new ProcessingDashboardVO();
@@ -84,11 +97,11 @@ public class DashboardServiceImpl implements DashboardService {
     result.setRange(spec.value);
     result.setSampleTime(realtime.sampleTime);
     result.setLineChart(processingChart(points, interfaceMap(interfaces), spec));
-    result.setTable(processingTable(points, interfaceMap(interfaces)));
+    result.setTable(processingTable(summaryPoints, interfaceMap(interfaces)));
 
     ProcessingDashboardVO.Summary summary = result.getSummary();
-    summary.setProcessedCount(sumProcessed(points));
-    summary.setAbnormalCount(sumAbnormal(points));
+    summary.setProcessedCount(sumProcessed(summaryPoints));
+    summary.setAbnormalCount(sumAbnormal(summaryPoints));
     summary.setUnhandledAlarmCount(realtime.unhandledAlarmCount == null
         ? mapper.countUnhandledAlarms(taskId) : realtime.unhandledAlarmCount);
     return result;
@@ -135,7 +148,7 @@ public class DashboardServiceImpl implements DashboardService {
     return result;
   }
 
-  /** 将采集曲线点按发送方和时间桶累计为折线图序列。 */
+  /** 历史采集点按完整固定区间汇总，最新点按相同跨度滚动汇总。 */
   private CollectionDashboardVO.LineChart collectionChart(List<CollectInterfaceStatistics> points,
       Map<Long, CollectInterfaceConfig> interfaceMap, RangeSpec spec) {
     List<Long> buckets = buckets(spec);
@@ -143,11 +156,13 @@ public class DashboardServiceImpl implements DashboardService {
     for (CollectInterfaceStatistics point : points) {
       String name = sender(interfaceMap.get(point.getInterfaceId()));
       long[] data = values.computeIfAbsent(name, key -> new long[buckets.size()]);
-      int index = index(point.getStatisticsTime(), spec, buckets.size());
-      if (index >= 0) { data[index] += zero(point.getCollectionCount()); }
+      // 同一记录可以同时属于历史区间和最新滚动区间，两者分别累计。
+      addChartValue(data, point.getStatisticsTime(), zero(point.getCollectionCount()), spec);
     }
     CollectionDashboardVO.LineChart chart = new CollectionDashboardVO.LineChart();
     chart.setTimePoints(labels(buckets, spec));
+    chart.setLatestWindowStartTime(chartTime(spec.rollingStart));
+    chart.setLatestWindowEndTime(chartTime(spec.chartEnd));
     List<CollectionDashboardVO.Series> series = new ArrayList<>();
     for (Map.Entry<String, long[]> entry : values.entrySet()) {
       CollectionDashboardVO.Series item = new CollectionDashboardVO.Series();
@@ -159,21 +174,21 @@ public class DashboardServiceImpl implements DashboardService {
     return chart;
   }
 
-  /** 将处理曲线点按发送方和时间桶累计为折线图序列。 */
+  /** 历史处理点按完整固定区间汇总，最新点按相同跨度滚动汇总。 */
   private ProcessingDashboardVO.LineChart processingChart(List<DataProcessingStatistics> points,
       Map<Long, CollectInterfaceConfig> interfaceMap, RangeSpec spec) {
     List<Long> buckets = buckets(spec);
     Map<String, long[]> values = new LinkedHashMap<>();
     for (DataProcessingStatistics point : points) {
-      int index = index(point.getStatisticsTime(), spec, buckets.size());
-      if (index >= 0) {
-        String name = sender(interfaceMap.get(point.getInterfaceId()));
-        long[] data = values.computeIfAbsent(name, key -> new long[buckets.size()]);
-        data[index] += zero(point.getProcessingCount());
-      }
+      // 为查询范围内的发送方保留序列，区间没有数据时正常返回零值。
+      String name = sender(interfaceMap.get(point.getInterfaceId()));
+      long[] data = values.computeIfAbsent(name, key -> new long[buckets.size()]);
+      addChartValue(data, point.getStatisticsTime(), zero(point.getProcessingCount()), spec);
     }
     ProcessingDashboardVO.LineChart chart = new ProcessingDashboardVO.LineChart();
     chart.setTimePoints(labels(buckets, spec));
+    chart.setLatestWindowStartTime(chartTime(spec.rollingStart));
+    chart.setLatestWindowEndTime(chartTime(spec.chartEnd));
     List<ProcessingDashboardVO.Series> series = new ArrayList<>();
     for (Map.Entry<String, long[]> entry : values.entrySet()) {
       ProcessingDashboardVO.Series item = new ProcessingDashboardVO.Series();
@@ -293,22 +308,48 @@ public class DashboardServiceImpl implements DashboardService {
   /** 解析前端时间范围并确定分桶粒度。 */
   private RangeSpec range(DashboardRange value) {
     DashboardRange selected = value == null ? DashboardRange.THREE_HOURS : value;
-    return new RangeSpec(selected.getValue(), selected.getHours(), selected.getBucketMinutes(), selected.isDateLabel());
+    // 每次查询只读取一次当前时间，所有窗口与汇总范围使用同一个时间基准。
+    return new RangeSpec(selected.getValue(), selected.getHours(), selected.getBucketMinutes(),
+        selected.isDateLabel(), LocalDateTime.now());
   }
 
   /** 查询范围、分桶大小及时间标签格式。 */
   private static class RangeSpec {
+    /** 原有查询范围和时间标签配置。 */
     final String value;
-    final int hours;
-    final int bucketMinutes;
     final boolean dateLabel;
     final LocalDateTime start;
-    RangeSpec(String value, int hours, int bucketMinutes, boolean dateLabel) {
+    /** 固定历史区间数量，最后另加一个同粒度的滚动点。 */
+    final int historyCount;
+    /** 每个曲线点覆盖的秒数。 */
+    final long bucketSeconds;
+    /** 历史首个区间起点、最新滚动区间起点和统一截止时间。 */
+    final long historyStart;
+    final long rollingStart;
+    final long chartEnd;
+    /** 兼顾曲线完整首点及原有汇总口径的数据库查询起点。 */
+    final LocalDateTime queryStart;
+    RangeSpec(String value, int hours, int bucketMinutes, boolean dateLabel, LocalDateTime now) {
       this.value = value;
-      this.hours = hours;
-      this.bucketMinutes = bucketMinutes;
       this.dateLabel = dateLabel;
-      start = LocalDateTime.now().minusHours(hours);
+      // 第一步：使用本次查询的时间基准，保留卡片和表格的原始查询起点。
+      start = now.minusHours(hours);
+      bucketSeconds = bucketMinutes * 60L;
+      historyCount = hours * 60 / bucketMinutes - 1;
+      // 第二步：扣除落库缓冲，再向下对齐五秒，避免切入未结束的数据库窗口。
+      long bufferedEpoch = now.atZone(ZoneId.systemDefault()).toEpochSecond()
+          - CHART_FLUSH_BUFFER_SECONDS;
+      chartEnd = Math.floorDiv(bufferedEpoch, STATISTICS_WINDOW_SECONDS)
+          * STATISTICS_WINDOW_SECONDS;
+      rollingStart = chartEnd - bucketSeconds;
+      // 第三步：历史区间必须完整结束；恰好对齐时避免与最新点重复。
+      long historyEnd = Math.floorDiv(chartEnd, bucketSeconds) * bucketSeconds;
+      if (historyEnd == chartEnd) { historyEnd -= bucketSeconds; }
+      historyStart = historyEnd - historyCount * bucketSeconds;
+      // 第四步：必要时补查历史首点的边界数据，汇总时再过滤回原始范围。
+      LocalDateTime chartStart = LocalDateTime.ofInstant(
+          Instant.ofEpochSecond(historyStart), ZoneId.systemDefault());
+      queryStart = chartStart.isBefore(start) ? chartStart : start;
     }
   }
 
@@ -355,28 +396,31 @@ public class DashboardServiceImpl implements DashboardService {
     }
   }
 
-  /** 生成完整时间桶，空桶也会保留为0。 */
+  /** 生成各点的区间结束时间，最后一个点使用滚动统计的实际截止时间。 */
   private List<Long> buckets(RangeSpec spec) {
-    int count = (spec.hours * 60) / spec.bucketMinutes + 1;
-    long start = bucketEpoch(spec.start, spec.bucketMinutes);
     List<Long> result = new ArrayList<>();
-    for (int index = 0; index < count; index++) { result.add(start + index * spec.bucketMinutes * 60L); }
+    // 历史横轴统一表示区间结束时间，与最新点的时间含义保持一致。
+    for (int index = 1; index <= spec.historyCount; index++) {
+      result.add(spec.historyStart + index * spec.bucketSeconds);
+    }
+    // 最新点始终覆盖完整跨度，不从当前固定区间起点重新累计。
+    result.add(spec.chartEnd);
     return result;
   }
 
-  /** 计算曲线点所属的时间桶下标。 */
-  private int index(LocalDateTime time, RangeSpec spec, int size) {
-    if (time == null) { return -1; }
-    long start = bucketEpoch(spec.start, spec.bucketMinutes);
-    long current = bucketEpoch(time, spec.bucketMinutes);
-    long index = (current - start) / (spec.bucketMinutes * 60L);
-    return index < 0 || index >= size ? -1 : (int) index;
-  }
-
-  /** 将时间向下对齐到指定分钟粒度。 */
-  private long bucketEpoch(LocalDateTime time, int minutes) {
+  /** 将五秒统计分别累计到固定历史区间及最新滚动区间，区间左闭右开。 */
+  private void addChartValue(long[] values, LocalDateTime time, long count, RangeSpec spec) {
+    // 无效时间和缓冲范围内的记录不参与曲线，卡片及表格仍独立汇总。
+    if (time == null) { return; }
     long epoch = time.atZone(ZoneId.systemDefault()).toEpochSecond();
-    return epoch / (minutes * 60L) * (minutes * 60L);
+    if (epoch >= spec.chartEnd) { return; }
+    // 完整历史区间按同一粒度定位，不向最新点写入固定区间的部分统计。
+    if (epoch >= spec.historyStart) {
+      long index = (epoch - spec.historyStart) / spec.bucketSeconds;
+      if (index < spec.historyCount) { values[(int) index] += count; }
+    }
+    // 最新点单独覆盖最近五分钟、三十分钟或四小时，与历史区间可以重叠。
+    if (epoch >= spec.rollingStart) { values[spec.historyCount] += count; }
   }
 
   /** 将时间桶转换为前端横轴标签。 */
@@ -384,9 +428,19 @@ public class DashboardServiceImpl implements DashboardService {
     DateTimeFormatter formatter = DateTimeFormatter.ofPattern(spec.dateLabel ? "MM-dd HH:mm" : "HH:mm");
     List<String> result = new ArrayList<>();
     for (long epoch : buckets) {
-      result.add(LocalDateTime.ofInstant(Instant.ofEpochSecond(epoch), ZoneId.systemDefault()).format(formatter));
+      // 最新时间标签保留秒数，准确展示扣除缓冲后的实际截止时间。
+      DateTimeFormatter selected = epoch == spec.chartEnd
+          ? DateTimeFormatter.ofPattern(spec.dateLabel ? "MM-dd HH:mm:ss" : "HH:mm:ss")
+          : formatter;
+      result.add(LocalDateTime.ofInstant(Instant.ofEpochSecond(epoch), ZoneId.systemDefault()).format(selected));
     }
     return result;
+  }
+
+  /** 返回最新统计区间的完整本地时间，供前端提示具体起止范围。 */
+  private String chartTime(long epoch) {
+    return LocalDateTime.ofInstant(Instant.ofEpochSecond(epoch), ZoneId.systemDefault())
+        .format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
   }
 
   /** 将基础类型数组转换为JSON可序列化的列表。 */

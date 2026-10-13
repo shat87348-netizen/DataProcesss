@@ -16,4 +16,4 @@
 *.tmp
 
 # 大型本地模拟数据
-/data-source-simulator/sample-data/temp2.dat
+/data-simulator-service/sample-data/temp2.dat

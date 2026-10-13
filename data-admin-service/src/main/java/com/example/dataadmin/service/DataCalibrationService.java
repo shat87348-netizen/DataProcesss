@@ -24,6 +24,8 @@ public interface DataCalibrationService {
     Long createChannelConfig(CalibChannelConfig config);
     /** 更新校准通道配置。 */
     boolean updateChannelConfig(CalibChannelConfig config);
+    /** 切换指定任务下有效校准通道的启用状态。 */
+    boolean updateChannelEnabled(String taskId, Long id, Integer enabled);
     /** 删除校准通道配置。 */
     boolean deleteChannelConfig(Long id);
     /** 查询指定试验任务的校准记录列表。 */

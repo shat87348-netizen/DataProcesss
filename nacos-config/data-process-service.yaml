@@ -11,7 +11,7 @@ spring:
     timeout: 3000ms
 # 当前UDP遥测处理主流程的RocketMQ连接和生产者配置。
 rocketmq:
-  name-server: 10.126.100.247:9876
+  name-server: 127.0.0.1:9876
   producer:
     group: telemetry
     send-message-timeout: 5000

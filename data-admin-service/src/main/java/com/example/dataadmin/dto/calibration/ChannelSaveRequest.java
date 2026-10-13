@@ -35,8 +35,6 @@ public class ChannelSaveRequest {
     private Integer autoClean;
     /** 是否启用：0 否，1 是。 */
     private Integer enabled;
-    /** 通道状态：0 停止，1 正常，2 异常。 */
-    private Integer channelStatus;
 
     public Long getId() {
         return id;
@@ -158,11 +156,4 @@ public class ChannelSaveRequest {
         this.enabled = enabled;
     }
 
-    public Integer getChannelStatus() {
-        return channelStatus;
-    }
-
-    public void setChannelStatus(Integer channelStatus) {
-        this.channelStatus = channelStatus;
-    }
 }

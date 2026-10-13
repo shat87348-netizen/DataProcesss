@@ -14,8 +14,6 @@
         <module>common-security</module>
         <module>data-admin-service</module>
         <module>data-process-service</module>
-        <!-- 独立UDP模拟数据源，用于按512字节读取文件并封装PDXP报文。 -->
-        <module>data-source-simulator</module>
         <!-- 独立模拟源管理服务，支持多实例PDXP和FEP发送。 -->
         <module>data-simulator-service</module>
     </modules>

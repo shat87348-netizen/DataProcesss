@@ -3,7 +3,7 @@
 <mapper namespace="com.example.dataadmin.mapper.CalibChannelConfigMapper">
 
     <!-- 公共查询字段。 -->
-    <sql id="columns">id, task_id, channel_name, calibration_formula, normal_range, detect_method, sigma_value, fluctuation_rate, chauvenet_coef, min_sample_count, iterate_count, sample_window, dynamic_update, auto_clean, enabled, channel_status, is_deleted, create_time, update_time</sql>
+    <sql id="columns">id, task_id, channel_name, calibration_formula, normal_range, detect_method, sigma_value, fluctuation_rate, chauvenet_coef, min_sample_count, iterate_count, sample_window, dynamic_update, auto_clean, enabled, is_deleted, create_time, update_time</sql>
 
     <!-- 按试验任务查询列表。 -->
     <select id="findAllByTaskId" resultType="com.example.dataadmin.entity.CalibChannelConfig">
@@ -54,7 +54,6 @@
             <if test="dynamicUpdate != null">dynamic_update,</if>
             <if test="autoClean != null">auto_clean,</if>
             <if test="enabled != null">enabled,</if>
-            <if test="channelStatus != null">channel_status,</if>
             <if test="isDeleted != null">is_deleted,</if>
         </trim>
         values
@@ -74,7 +73,6 @@
             <if test="dynamicUpdate != null">#{dynamicUpdate},</if>
             <if test="autoClean != null">#{autoClean},</if>
             <if test="enabled != null">#{enabled},</if>
-            <if test="channelStatus != null">#{channelStatus},</if>
             <if test="isDeleted != null">#{isDeleted},</if>
         </trim>
     </insert>
@@ -97,7 +95,6 @@
             <if test="dynamicUpdate != null">dynamic_update = #{dynamicUpdate},</if>
             <if test="autoClean != null">auto_clean = #{autoClean},</if>
             <if test="enabled != null">enabled = #{enabled},</if>
-            <if test="channelStatus != null">channel_status = #{channelStatus},</if>
             update_time = current_timestamp,
         </set>
         where id = #{id} and is_deleted = 0
@@ -108,5 +105,12 @@
         update calib_channel_config set is_deleted = 1, update_time = current_timestamp where id = #{id} and is_deleted = 0
     </update>
 
-    <!-- 更新启用状态。 -->
+    <!-- 必填任务编号和通道主键共同限定写入范围，仅修改启用开关。 -->
+    <update id="updateEnabled">
+        update calib_channel_config
+        set enabled = #{enabled}, update_time = current_timestamp
+        where task_id = #{taskId}
+          and id = #{id}
+          and is_deleted = 0
+    </update>
 </mapper>
