@@ -2,8 +2,8 @@ package com.example.dataadmin.service;
 
 import com.example.common.response.PageResult;
 import com.example.dataadmin.entity.CalibChannelConfig;
-import com.example.dataadmin.entity.CalibRecord;
 import com.example.dataadmin.vo.calibration.CalibRecordDetailVO;
+import com.example.dataadmin.vo.calibration.CalibRecordListVO;
 import com.example.dataadmin.vo.calibration.CalibrationOverviewVO;
 
 import java.util.List;
@@ -14,7 +14,7 @@ import java.util.List;
  * 负责组织页面所需的查询和写入操作，数据库访问由对应Mapper完成。
  */
 public interface DataCalibrationService {
-    /** 查询指定试验任务的野值数量总览。 */
+    /** 查询指定试验任务的累计校准、清洗及野值数量总览。 */
     CalibrationOverviewVO getOverview(String taskId);
     /** 查询指定试验任务的校准通道列表。 */
     List<CalibChannelConfig> listChannelConfigs(String taskId);
@@ -28,8 +28,8 @@ public interface DataCalibrationService {
     boolean updateChannelEnabled(String taskId, Long id, Integer enabled);
     /** 删除校准通道配置。 */
     boolean deleteChannelConfig(Long id);
-    /** 查询指定试验任务的校准记录列表。 */
-    PageResult<CalibRecord> pageCalibRecords(
+    /** 分页查询指定任务的校准记录及每个通道的累计校准数量。 */
+    PageResult<CalibRecordListVO> pageCalibRecords(
             String taskId,
             Integer pageNum,
             Integer pageSize);

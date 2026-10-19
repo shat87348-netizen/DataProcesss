@@ -35,20 +35,12 @@ public class ProtocolSaveRequest {
     /** 协议类型：1 JSON，2 PDXP，3 Protobuf，4 RPC。 */
     private Integer protocolType;
 
-    /** 数据源类型：1 遥测，2 遥感，3 设备，4 环境。 */
-    @NotNull(message = "数据源类型不能为空")
-    @Min(value = 1, message = "数据源类型只能为1到4")
-    @Max(value = 4, message = "数据源类型只能为1到4")
-    /** 数据源类型：1 遥测，2 遥感，3 设备，4 环境。 */
-    private Integer dataSourceType;
-
     /** 配置说明。 */
     @Size(max = 500, message = "配置说明不能超过500个字符")
     /** 配置说明。 */
     private String configDesc;
 
-    /** 协议动态参数，例如 JSON 字段映射关系。 */
-    /** 协议解析使用的动态配置参数。 */
+    /** 协议动态参数；前端普通大文本框中的JSON解析为对象后提交，后端按协议校验。 */
     private Map<String, Object> configParams;
 
     /** 自定义解析器实现类。 */
@@ -90,14 +82,6 @@ public class ProtocolSaveRequest {
 
     public void setProtocolType(Integer protocolType) {
         this.protocolType = protocolType;
-    }
-
-    public Integer getDataSourceType() {
-        return dataSourceType;
-    }
-
-    public void setDataSourceType(Integer dataSourceType) {
-        this.dataSourceType = dataSourceType;
     }
 
     public String getConfigDesc() {

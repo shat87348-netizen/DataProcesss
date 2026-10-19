@@ -21,7 +21,4 @@
         where sample_time &gt;= #{startTime}
         order by sample_time
     </select>
-    <delete id="deleteBefore">
-        delete from sys_monitor_snapshot where sample_time &lt; #{expiredTime}
-    </delete>
 </mapper>

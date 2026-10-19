@@ -29,23 +29,18 @@
             on rule_config.task_id = interface_config.task_id
         where interface_config.is_deleted = 0
           and interface_config.enabled = 1
-          and interface_config.task_id = (
-              select current_task.task_id
-              from (
-                  select
-                      experiment_task_config.task_id,
-                      experiment_task_config.task_status
-                  from experiment_task experiment_task_config
-                  order by
-                      experiment_task_config.event_time desc,
-                      experiment_task_config.update_time desc
-                  limit 1
-              ) current_task
-              where current_task.task_status = 1
+          <!-- HTTP由统一Web入口接收，不交给UDP或TCP接收器创建监听任务。 -->
+          and interface_config.transfer_type in (1, 2)
+          <!-- 只加载所属试验任务仍在运行的接口，不受其他任务状态影响。 -->
+          and exists (
+              select 1
+              from experiment_task task_config
+              where task_config.task_id = interface_config.task_id
+                and task_config.task_status = 1
           )
     </sql>
 
-    <!-- 查询服务启动时当前运行任务下应该自动运行的全部采集接口。 -->
+    <!-- 查询服务启动时所有运行中任务下应该自动运行的采集接口。 -->
     <select id="findAllEnabledInterfaces"
             resultType="com.example.dataprocess.entity.CollectInterfaceRuntimeConfig">
         <include refid="enabledInterfaceQuery"/>

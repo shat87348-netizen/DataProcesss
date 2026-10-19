@@ -17,7 +17,7 @@ class ProtocolConfigParserTest {
     /** 验证RPC配置可以转换为RPC字段类。 */
     @Test
     void shouldParseRpcProtocolFields() {
-        // 准备与Admin协议配置结构一致的RPC字段JSON。
+        // 保留旧配置的数据类型属性，确认删除属性后历史配置仍能正确解析。
         String configParams = "{\"fields\":["
                 + "{\"field\":\"sat_code\",\"fieldName\":\"卫星代号\","
                 + "\"dataType\":\"string\",\"value\":\"SAT-001\"}]}";
@@ -26,11 +26,10 @@ class ProtocolConfigParserTest {
         List<RpcProtocolField> fields = parser().parseFields(
                 configParams, RpcProtocolField.class);
 
-        // 校验通用解析器保留RPC字段的所有属性。
+        // 校验通用解析器忽略废弃属性，并保留仍在使用的字段信息。
         assertEquals(1, fields.size());
         assertEquals("sat_code", fields.get(0).getField());
         assertEquals("卫星代号", fields.get(0).getFieldName());
-        assertEquals("string", fields.get(0).getDataType());
         assertEquals("SAT-001", fields.get(0).getValue());
     }
 

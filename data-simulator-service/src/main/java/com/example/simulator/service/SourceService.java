@@ -1,7 +1,7 @@
 package com.example.simulator.service;
 
 import com.example.common.response.PageResult;
-import com.example.simulator.api.SaveRequest;
+import com.example.simulator.controller.SaveRequest;
 import com.example.simulator.model.RunRecord;
 import com.example.simulator.model.SourceConfig;
 

@@ -8,17 +8,27 @@
         is_deleted, create_time, update_time
     </sql>
 
-    <!-- 按试验任务汇总未删除校准记录的累计野值数量。 -->
-    <select id="sumOutlierCount" resultType="long">
-        select coalesce(sum(outlier_count), 0)
+    <!-- 同一次查询汇总累计校准及野值数量，无记录时统一返回零。 -->
+    <select id="findOverview"
+            resultType="com.example.dataadmin.vo.calibration.CalibrationOverviewVO">
+        select coalesce(sum(calibration_count), 0) as calibration_count,
+               coalesce(sum(outlier_count), 0) as outlier_count
         from calib_record
-        where task_id = #{taskId}
-          and is_deleted = 0
+        where is_deleted = 0
+        <if test="taskId != null and taskId != ''">
+            and task_id = #{taskId}
+        </if>
+        <if test="taskId == null or taskId == ''">
+            <!-- 缺少任务编号时禁止跨任务汇总。 -->
+            and 1 = 0
+        </if>
     </select>
 
-    <!-- 按试验任务查询列表。 -->
-    <select id="findAllByTaskId" resultType="com.example.dataadmin.entity.CalibRecord">
-        select <include refid="columns"/> from calib_record
+    <!-- 列表复用原有汇总字段，额外读取每个通道的累计校准数量。 -->
+    <select id="findAllByTaskId"
+            resultType="com.example.dataadmin.vo.calibration.CalibRecordListVO">
+        select <include refid="columns"/>, calibration_count
+        from calib_record
         <where>
             <if test="taskId != null and taskId != ''">task_id = #{taskId}</if>
             <if test="taskId != null and taskId != ''">and</if>

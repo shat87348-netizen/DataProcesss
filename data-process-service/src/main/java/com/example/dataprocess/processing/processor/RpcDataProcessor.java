@@ -66,16 +66,10 @@ public class RpcDataProcessor implements DataProcessor {
                         config.getProtocolConfigParams(),
                         RpcProtocolField.class);
 
-        // 第三步：字节原始数据放入RPC请求。
+        // 第三步：复用遥测帧还原逻辑，帧头为零时RPC只接收遥测数据。
+        byte[] combined = payload.restoreTelemetryFrame();
+        // 返回Proto仍使用中间遥测数据，不把RPC请求中还原的帧头带回去。
         byte[] data = payload.getData();
-        byte[] telemetryHeader = payload.getTelemetryHeader();
-
-        // 创建遥测帧数组，长度为帧头和遥测数据之和。
-        byte[] combined = new byte[telemetryHeader.length + data.length];
-
-        // 先复制遥测帧头，再复制中间遥测数据。
-        System.arraycopy(telemetryHeader, 0, combined, 0, telemetryHeader.length);
-        System.arraycopy(data, 0, combined, telemetryHeader.length, data.length);
         Tm.FrameRequest.Builder requestBuilder = Tm.FrameRequest.newBuilder()
                 .setSatCode("")
                 .setChannel("")
@@ -116,6 +110,7 @@ public class RpcDataProcessor implements DataProcessor {
             // 第六步：解析完整遥测消息并记录本帧远程处理完成信息。
             TelemetryMessage result = TelemetryMessage.parseFrom(responseData);
             // 使用本次处理时间直接组装RPC返回消息的协议头。
+
             Instant messageTime = Instant.now();
             ProtoHeadInfo protoHead = ProtoHeadInfo.newBuilder()
                     .setTopicType(ExchangeTopicType.TEST_DATA_TYPE)
@@ -126,7 +121,7 @@ public class RpcDataProcessor implements DataProcessor {
                     .setTaskId(config.getTaskId())
                     .setMsgSource("数据处理")
                     .build();
-            // IoTDB整帧原码统一使用已经拆出的数据域，不依赖RPC返回的原码格式。
+            // 返回Proto原码统一使用拆出的中间遥测数据，不依赖RPC返回格式。
             result = result.toBuilder()
                     .setProtoHead(protoHead)
                     .setFrameRawData(ByteString.copyFrom(data))

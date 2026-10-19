@@ -33,26 +33,13 @@
           and rule_config.is_deleted = 0
         order by rule_config.id
     </select>
-    <!-- 仅在指定系统时递归匹配其后代，避免全设备列表扫描。 -->
+    <!-- 指定系统时只匹配直属参数；未指定系统时查询当前设备的全部参数。 -->
     <sql id="systemFilter">
         <if test="systemId != null">
-            and rule_config.system_id in (
-                with recursive descendants(id) as (
-                    select id from telemetry_system_config
-                    where task_id = #{taskId} and device_satellite_id = #{deviceSatelliteId}
-                      and id = #{systemId} and is_deleted = 0
-                    union all
-                    select child.id from telemetry_system_config child
-                    inner join descendants parent on child.parent_id = parent.id
-                    where child.task_id = #{taskId}
-                      and child.device_satellite_id = #{deviceSatelliteId}
-                      and child.is_deleted = 0
-                )
-                select id from descendants
-            )
+            and rule_config.system_id = #{systemId}
         </if>
     </sql>
-    <!-- 统计分页总数。 -->
+    <!-- 复用直属系统筛选条件，保证分页总数与列表查询范围一致。 -->
     <select id="countPage" resultType="long">
         select count(rule_config.id)
         from telemetry_parse_rule_config rule_config

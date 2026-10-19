@@ -98,16 +98,6 @@ public final class BusinessEnums {
         public String getLabel() { return label; }
     }
 
-    /** 采集数据来源类型。 */
-    public enum DataSourceType implements LabeledEnum {
-        TELEMETRY(1, "遥测"), REMOTE_SENSING(2, "遥感"), DEVICE(3, "设备"), ENVIRONMENT(4, "环境");
-        private final int value;
-        private final String label;
-        DataSourceType(int value, String label) { this.value = value; this.label = label; }
-        public Object getValue() { return value; }
-        public String getLabel() { return label; }
-    }
-
     /** 可视化组件类型。 */
     public enum WidgetType implements LabeledEnum {
         REALTIME_CURVE(1, "实时曲线"),

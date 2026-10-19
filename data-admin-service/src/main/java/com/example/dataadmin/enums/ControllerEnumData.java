@@ -42,7 +42,6 @@ public final class ControllerEnumData {
         EnumData.add(data, "transferType", BusinessEnums.TransferType.values());
         EnumData.add(data, "transferProtocol", BusinessEnums.TransferProtocol.values());
         EnumData.add(data, "protocolType", BusinessEnums.ProtocolType.values());
-        EnumData.add(data, "dataSourceType", BusinessEnums.DataSourceType.values());
         EnumData.add(data, "status", BusinessEnums.InterfaceStatus.values());
         EnumData.add(data, "enabled", BusinessEnums.Enabled.values());
         return data;

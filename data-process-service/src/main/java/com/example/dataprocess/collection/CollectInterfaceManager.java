@@ -37,7 +37,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 public class CollectInterfaceManager implements DisposableBean {
     /** 告警组件采用独立注入，复用已有离线构造入口。 */
     @org.springframework.beans.factory.annotation.Autowired
-    private com.example.dataprocess.service.DataAlarmRecorder alarmRecorder;
+    private com.example.dataprocess.alarm.DataAlarmRecorder alarmRecorder;
 
     /** 提交异常上下文，采集线程不直接写数据库。 */
     private void alarm(com.example.dataprocess.entity.CollectInterfaceRuntimeConfig config,
@@ -117,7 +117,7 @@ public class CollectInterfaceManager implements DisposableBean {
             // 第一步：从数据库读取全部启用且未删除的接口运行配置。
             enabledConfigs =
                     runtimeMapper.findAllEnabledInterfaces();
-            // 第二步：接口启动前按其共同任务加载一次有效校准通道配置。
+            // 第二步：接口启动前按各自任务加载有效校准通道配置。
             attachCalibrationConfigs(enabledConfigs);
             // 第三步：逐个提交接收任务，单个接口失败不会阻断其他接口启动。
             synchronizeRunningInterfaces(enabledConfigs);
@@ -145,7 +145,7 @@ public class CollectInterfaceManager implements DisposableBean {
         List<CollectInterfaceRuntimeConfig> configs = normalizedIds.isEmpty()
                 ? new ArrayList<CollectInterfaceRuntimeConfig>()
                 : runtimeMapper.findEnabledInterfacesByIds(normalizedIds);
-        // 第三步：接口同步前按其共同任务刷新一次有效校准通道配置。
+        // 第三步：接口同步前按各自任务刷新有效校准通道配置。
         attachCalibrationConfigs(configs);
         // 第四步：按数据库实际配置启动、更新和停止接口。
         synchronizeRunningInterfaces(configs);
@@ -159,37 +159,41 @@ public class CollectInterfaceManager implements DisposableBean {
         return runningIds;
     }
 
-    /** 查询一次共同任务的有效校准通道，并让本批接口共用同一个只读Map。 */
+    /** 按任务加载有效校准通道，同一任务的接口共用配置快照。 */
     private void attachCalibrationConfigs(
             List<CollectInterfaceRuntimeConfig> configs) {
         if (configs == null || configs.isEmpty()) {
             return;
         }
-        String taskId = configs.get(0).getTaskId();
-        if (taskId == null || taskId.trim().isEmpty()) {
-            throw new IllegalArgumentException("启用采集接口未配置试验任务编号");
-        }
-        // 接口ID列表按业务约定只允许属于同一个试验任务。
+        // 第一步：同一批接口允许分属不同试验任务，每个任务只查询一次校准配置。
+        Map<String, Map<String, CalibrationChannelRuntimeConfig>> configsByTask =
+                new HashMap<>();
         for (CollectInterfaceRuntimeConfig config : configs) {
-            if (!taskId.equals(config.getTaskId())) {
-                throw new IllegalArgumentException("启用采集接口不属于同一个试验任务");
+            String taskId = config.getTaskId();
+            if (taskId == null || taskId.trim().isEmpty()) {
+                throw new IllegalArgumentException("启用采集接口未配置试验任务编号");
             }
-        }
-        Map<String, CalibrationChannelRuntimeConfig> calibrationConfigs =
-                calibrationConfigManager.load(taskId);
-        for (CollectInterfaceRuntimeConfig config : configs) {
+            Map<String, CalibrationChannelRuntimeConfig> calibrationConfigs =
+                    configsByTask.computeIfAbsent(taskId, calibrationConfigManager::load);
             config.setCalibrationConfigMap(calibrationConfigs);
         }
-        // 同步时加载每个设备的解析配置，处理线程不再逐帧查询参数表。
+        // 第二步：各接口按自身任务和设备加载解析配置，处理线程不再逐帧查询参数表。
         attachPdxpFields(configs);
     }
 
-    /** 每批同步只加载一次相同设备的解析字段。 */
+    /** 每批同步仅为PDXP本地处理加载设备身份和解析字段。 */
     private void attachPdxpFields(List<CollectInterfaceRuntimeConfig> configs) {
         Map<Long, List<PdxpProtocolField>> fieldsByDevice = new HashMap<>();
         Map<Long, PdxpFrameSource> sourceByDevice = new HashMap<>();
         for (CollectInterfaceRuntimeConfig config : configs) {
             if (!Integer.valueOf(2).equals(config.getTransferProtocol())) {
+                continue;
+            }
+            // RPC以卫星和通道代号确定身份，清理旧快照且不查询本地设备或参数。
+            if (Integer.valueOf(1).equals(config.getRpcEnabled())) {
+                config.setDeviceSatelliteId(null);
+                config.setDeviceSatelliteName(null);
+                config.setPdxpFields(java.util.Collections.emptyList());
                 continue;
             }
             Long deviceId = protocolDeviceId(config.getProtocolConfigParams());
@@ -203,15 +207,13 @@ public class CollectInterfaceManager implements DisposableBean {
             }
             config.setDeviceSatelliteId(deviceId);
             config.setDeviceSatelliteName(source.getName());
-            // RPC处理只需设备身份；本地处理才加载按位宽解析的参数快照。
-            if (!Integer.valueOf(1).equals(config.getRpcEnabled())) {
-                List<PdxpProtocolField> fields = fieldsByDevice.computeIfAbsent(deviceId,
-                        id -> telemetryMappingMapper.findPdxpFieldsByDeviceId(config.getTaskId(), id));
-                if (fields.isEmpty()) {
-                    throw new IllegalArgumentException("PDXP协议关联的设备没有有效参数：" + deviceId);
-                }
-                config.setPdxpFields(fields);
+            // 本地处理加载按位宽解析的参数快照，处理线程不再查询参数表。
+            List<PdxpProtocolField> fields = fieldsByDevice.computeIfAbsent(deviceId,
+                    id -> telemetryMappingMapper.findPdxpFieldsByDeviceId(config.getTaskId(), id));
+            if (fields.isEmpty()) {
+                throw new IllegalArgumentException("PDXP协议关联的设备没有有效参数：" + deviceId);
             }
+            config.setPdxpFields(fields);
         }
     }
 

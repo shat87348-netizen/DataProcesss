@@ -14,6 +14,8 @@ import com.example.dataadmin.mapper.ProcessedTelemetryFilterSelectionMapper;
 import com.example.dataadmin.mapper.DeviceSatelliteMapper;
 import com.example.dataadmin.mapper.IoTDBFrameQueryMapper;
 import com.example.dataadmin.enums.DeviceSatelliteType;
+import com.example.dataadmin.enums.EnumData;
+import com.example.dataadmin.enums.BusinessEnums;
 import com.example.dataadmin.service.support.ParameterWorkbookParser;
 import com.example.dataadmin.service.support.SystemResourceMetrics;
 import com.example.dataadmin.vo.processing.DeviceSatelliteOptionVO;
@@ -217,14 +219,14 @@ public class DataProcessingServiceImpl implements DataProcessingService {
     @Override
     public PageResult<RealtimeTelemetryFrameVO> pageRealtimeTelemetryFrames(
             String taskId,
-            Long deviceSatelliteId,
+            Long interfaceId,
             Integer pageNum,
             Integer pageSize) {
         // 第一步：任务编号必须明确，防止查询到其他试验任务的数据。
         String normalizedTaskId = requireIoTDBTaskId(taskId);
         // 第二步：校验分页范围，避免一次读取大量原始帧。
         IoTDBPage page = requireIoTDBPage(pageNum, pageSize);
-        String devicePath = iotdbFrameDevicePath(normalizedTaskId, deviceSatelliteId);
+        String devicePath = iotdbFrameDevicePath(normalizedTaskId, interfaceId);
         // 第三步：所有IoTDB语句通过MyBatis映射生成。
         String sql = frameQueryMapper.realtimeFrames(
                 devicePath,
@@ -282,14 +284,14 @@ public class DataProcessingServiceImpl implements DataProcessingService {
     @Override
     public PageResult<InvalidTelemetryFrame> pageInvalidTelemetryFrames(
             String taskId,
-            Long deviceSatelliteId,
+            Long interfaceId,
             Integer pageNum,
             Integer pageSize) {
         // 第一步：任务编号必须明确，防止查询到其他试验任务的数据。
         String normalizedTaskId = requireIoTDBTaskId(taskId);
         // 第二步：校验分页范围并转换全部文本查询条件。
         IoTDBPage page = requireIoTDBPage(pageNum, pageSize);
-        String devicePath = iotdbFrameDevicePath(normalizedTaskId, deviceSatelliteId);
+        String devicePath = iotdbFrameDevicePath(normalizedTaskId, interfaceId);
         // 第三步：异常帧与正常帧共用_frame节点，只按统一检查结果编码筛选。
         String sql = frameQueryMapper.invalidFrames(
                 devicePath,
@@ -376,29 +378,23 @@ public class DataProcessingServiceImpl implements DataProcessingService {
         return normalizedTaskId;
     }
 
-    /** 构造实时帧和异常帧查询使用的设备路径。 */
-    private String iotdbFrameDevicePath(
-            String taskId,
-            Long deviceSatelliteId) {
-        // 整帧始终位于遥测类型节点下的_frame设备。
-        return iotdbTaskDevicePrefix(taskId, deviceSatelliteId)
-                + ".tms.*._frame";
-    }
-
-    /** 构造所有查询共用的任务和设备卫星路径前缀。 */
-    private String iotdbTaskDevicePrefix(
-            String taskId,
-            Long deviceSatelliteId) {
-        if (deviceSatelliteId != null && deviceSatelliteId <= 0) {
-            throw new IllegalArgumentException("设备卫星主键必须大于零");
+    /** 按任务及可选采集接口构造整帧查询路径，设备卫星身份不参与筛选。 */
+    private String iotdbFrameDevicePath(String taskId, Long interfaceId) {
+        // 第一步：接口筛选必须是有效主键，任务节点沿用统一转义规则。
+        if (interfaceId != null && interfaceId <= 0) {
+            throw new IllegalArgumentException("采集接口主键必须大于零");
         }
-        String deviceNode = deviceSatelliteId == null
-                ? "*" : IoTDBPathTool.prefixedPathNode(
-                        "device_", String.valueOf(deviceSatelliteId), "unknown_device");
-        return "root.db."
-                + IoTDBPathTool.prefixedPathNode(
-                        "task_", taskId, "unknown_task")
-                + "." + deviceNode;
+        String taskPath = "root.db."
+                + IoTDBPathTool.prefixedPathNode("task_", taskId, "unknown_task");
+        // 第二步：明确接口时只查询该接口节点，历史无接口身份的数据不推断来源。
+        if (interfaceId != null) {
+            return taskPath + "."
+                    + IoTDBPathTool.prefixedPathNode("interface_",
+                            String.valueOf(interfaceId), "unknown_interface")
+                    + ".**._frame";
+        }
+        // 第三步：不筛选接口时兼容有无接口层级的本地及RPC历史整帧。
+        return taskPath + ".**._frame";
     }
 
     /** 从IoTDB设备路径中提取设备卫星主键。 */
@@ -505,7 +501,7 @@ public class DataProcessingServiceImpl implements DataProcessingService {
         return parseRuleMapper.findAllByTaskId(taskId, deviceSatelliteId);
     }
 
-    /** 参数解析配置使用数据库分页，系统筛选包含所选系统的后代。 */
+    /** 参数解析配置使用数据库分页，指定系统时只查询该系统直属参数。 */
     @Override
     public PageResult<TelemetryParseRuleConfig> pageParseRules(String taskId,
             Long deviceSatelliteId, Long systemId, Integer pageNum, Integer pageSize) {
@@ -777,24 +773,51 @@ public class DataProcessingServiceImpl implements DataProcessingService {
     /** 仍被有效协议引用的工作表不能从本次全量导入中移除。 */
     private void assertUnreferencedDevices(String taskId, Set<String> sheets,
                                             Map<String, DeviceSatellite> existing) {
-        Set<Long> removedIds = new HashSet<>();
+        // 第一步：找出本次全量导入未包含的原有设备或卫星，并保留名称用于提示。
+        Map<Long, DeviceSatellite> removedDevices = new HashMap<Long, DeviceSatellite>();
         for (Map.Entry<String, DeviceSatellite> entry : existing.entrySet()) {
             if (!sheets.contains(entry.getKey())) {
-                removedIds.add(entry.getValue().getId());
+                DeviceSatellite device = entry.getValue();
+                removedDevices.put(device.getId(), device);
             }
         }
-        if (removedIds.isEmpty()) {
+        if (removedDevices.isEmpty()) {
             return;
         }
+        // 第二步：只检查仍有效的PDXP协议配置，保持其他协议的导入行为不变。
         for (CollectProtocolConfig protocol : protocolMapper.findAllByTaskId(taskId)) {
+            // 只有PDXP本地协议关联导入设备，RPC历史主键不应阻止替换导入。
+            if (!BusinessEnums.ProtocolType.PDXP.getValue().equals(protocol.getProtocolType())) {
+                continue;
+            }
             if (protocol.getConfigParams() == null || protocol.getConfigParams().trim().isEmpty()) {
                 continue;
             }
             try {
                 JsonNode root = objectMapper.readTree(protocol.getConfigParams());
                 JsonNode id = root == null ? null : root.get("deviceSatelliteId");
-                if (id != null && removedIds.contains(id.asLong())) {
-                    throw new IllegalArgumentException("导入文件缺少协议配置正在使用的设备卫星：" + id.asLong());
+                DeviceSatellite removedDevice = id == null ? null : removedDevices.get(id.asLong());
+                if (removedDevice != null) {
+                    // 第三步：用协议名称、已有枚举的中文类型及设备名称说明缺失项。
+                    String protocolName = protocol.getConfigName();
+                    if (protocolName == null || protocolName.trim().isEmpty()) {
+                        protocolName = "未命名协议配置（编号：" + protocol.getId() + "）";
+                    }
+                    String deviceType = EnumData.labelOf(
+                            DeviceSatelliteType.values(), removedDevice.getType());
+                    if (deviceType == null) {
+                        deviceType = "设备或卫星";
+                    }
+                    String deviceName = removedDevice.getName();
+                    if (deviceName == null || deviceName.trim().isEmpty()) {
+                        deviceName = removedDevice.getCode();
+                    }
+                    if (deviceName == null || deviceName.trim().isEmpty()) {
+                        deviceName = "编号：" + removedDevice.getId();
+                    }
+                    throw new IllegalArgumentException("导入文件缺少协议配置【"
+                            + protocolName.trim() + "】正在使用的" + deviceType
+                            + "【" + deviceName.trim() + "】");
                 }
             } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
                 throw new IllegalArgumentException("协议配置参数格式不正确，无法执行替换导入", exception);

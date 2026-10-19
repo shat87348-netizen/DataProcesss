@@ -36,7 +36,7 @@ import java.util.function.BooleanSupplier;
 public class FepProtocolHandler implements ProtocolHandler {
     /** 告警组件采用独立注入，复用已有离线构造入口。 */
     @org.springframework.beans.factory.annotation.Autowired
-    private com.example.dataprocess.service.DataAlarmRecorder alarmRecorder;
+    private com.example.dataprocess.alarm.DataAlarmRecorder alarmRecorder;
 
     /** 提交异常上下文，采集线程不直接写数据库。 */
     private void alarm(com.example.dataprocess.entity.CollectInterfaceRuntimeConfig config,
@@ -446,6 +446,9 @@ public class FepProtocolHandler implements ProtocolHandler {
                 config,
                 acceptance.getFilePath(),
                 LocalDateTime.now());
+
+        // 补登记成功后累计完整文件采集量，已有记录由上方判断跳过，避免重复累计。
+        statistics.recordCollection(config);
         LOGGER.info("FEP遗留完整文件已经补登记，接口编号：{}，文件：{}",
                 config.getInterfaceId(), acceptance.getFilePath());
     }

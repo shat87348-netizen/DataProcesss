@@ -3,12 +3,11 @@ package com.example.dataadmin.service;
 import com.example.common.response.PageResult;
 import com.example.dataadmin.dto.collection.InterfaceQueryRequest;
 import com.example.dataadmin.dto.collection.InterfaceSaveRequest;
+import com.example.dataadmin.dto.collection.ProtocolQueryRequest;
 import com.example.dataadmin.dto.collection.ProtocolSaveRequest;
 import com.example.dataadmin.entity.CollectInterfaceConfig;
 import com.example.dataadmin.vo.collection.CollectionOverviewVO;
 import com.example.dataadmin.vo.collection.ProtocolConfigVO;
-
-import java.util.List;
 
 /**
  * 数据采集业务接口。
@@ -37,8 +36,8 @@ public interface DataCollectionService {
     /** 修改采集接口启用状态。 */
     void updateInterfaceEnabled(Long id, Integer enabled);
 
-    /** 查询协议配置列表。 */
-    List<ProtocolConfigVO> listProtocolConfigs(String taskId);
+    /** 按任务、协议类型和名称分页查询协议配置。 */
+    PageResult<ProtocolConfigVO> pageProtocolConfigs(ProtocolQueryRequest request);
 
     /** 查询协议配置详情。 */
     ProtocolConfigVO getProtocolConfig(Long id);

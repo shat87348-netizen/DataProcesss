@@ -4,11 +4,11 @@ import java.time.LocalDateTime;
 
 /** IoTDB完整采集帧，包括正常处理结果及已入库的异常帧。 */
 public class RealtimeTelemetryFrameVO {
-    /** 设备卫星主键，来自IoTDB路径。 */
+    /** 本地设备卫星主键，来自IoTDB路径；RPC独立身份没有此主键，返回空值。 */
     private Long deviceSatelliteId;
     /** 消息时间。 */
     private LocalDateTime time;
-    /** 导入工作表名称。 */
+    /** 本地导入设备名称；RPC使用返回的卫星名称，缺失时显示卫星代号。 */
     private String deviceSatelliteName;
     /** Proto通道名称；本地解析失败时取设备名称的下划线前缀。 */
     private String channelName;

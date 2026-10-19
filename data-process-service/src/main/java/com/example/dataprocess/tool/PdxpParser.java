@@ -33,7 +33,7 @@ public final class PdxpParser {
 
     /** PDXP 固定包头长度。 */
     public static final int HEADER_LENGTH = 32;
-    /** 当前UDP传输协议在PDXP包头前增加的传输头长度。 */
+    /** PDXP包头之前的默认传输头长度，运行入口可按配置覆盖。 */
     public static final int TRANSPORT_HEADER_LENGTH = 2;
 
     /** TCP 数据包定界符。 */
@@ -96,20 +96,31 @@ public final class PdxpParser {
         return parseUdpLenient(udpData);
     }
 
-    /** 解析包含两字节传输头的UDP PDXP报文。 */
+    /** 保留默认两字节传输头的调用入口。 */
     public static List<PdxpPacket> parseTransportUdp(byte[] udpData)
             throws IOException {
-        // 第一步：完整报文至少需要包含传输头和PDXP固定包头。
+        return parseTransportUdp(udpData, TRANSPORT_HEADER_LENGTH);
+    }
+
+    /** 按配置长度拆分传输头，零长度直接从PDXP固定包头开始解析。 */
+    public static List<PdxpPacket> parseTransportUdp(byte[] udpData,
+            int transportHeaderLength) throws IOException {
+        // 第一步：校验配置长度和报文实际长度，使用长整数避免相加溢出。
+        if (transportHeaderLength < 0) {
+            throw new IllegalArgumentException("传输头字节数不能为负数");
+        }
         if (udpData == null
-                || udpData.length < TRANSPORT_HEADER_LENGTH + HEADER_LENGTH) {
-            throw new IllegalArgumentException("UDP数据不包含完整传输头和PDXP包头");
+                || udpData.length < (long) transportHeaderLength + HEADER_LENGTH) {
+            throw new IllegalArgumentException("PDXP报文长度不足，传输头配置字节数："
+                    + transportHeaderLength + "，PDXP包头字节数：" + HEADER_LENGTH
+                    + "，实际报文字节数：" + (udpData == null ? 0 : udpData.length));
         }
 
-        // 第二步：保留两字节传输头，并从其后开始复用现有PDXP解析逻辑。
+        // 第二步：按实际配置保留传输头；长度为零时得到空数组，不跳过任何字节。
         byte[] transportHeader = Arrays.copyOfRange(
-                udpData, 0, TRANSPORT_HEADER_LENGTH);
+                udpData, 0, transportHeaderLength);
         byte[] pdxpData = Arrays.copyOfRange(
-                udpData, TRANSPORT_HEADER_LENGTH, udpData.length);
+                udpData, transportHeaderLength, udpData.length);
         List<PdxpPacket> parsedPackets = parseUdp(pdxpData);
 
         // 第三步：把传输头写入每个解析结果，保证该字段不会在解析过程中丢失。
@@ -945,7 +956,7 @@ public final class PdxpParser {
         private final int dateDays;
         /** 相对北京时零时的 0.1 毫秒计数。 */
         private final long timeUnits;
-        /** PDXP包头之前的两字节传输头。 */
+        /** PDXP包头之前按配置读取的传输头，零长度时为空数组。 */
         private final byte[] transportHeader;
         /** 数据域。 */
         private final byte[] data;
@@ -1083,7 +1094,7 @@ public final class PdxpParser {
             return timeUnits;
         }
 
-        /** @return 两字节传输头副本 */
+        /** @return 实际长度的传输头副本，配置为零时为空数组 */
         public byte[] getTransportHeader() {
             return Arrays.copyOf(transportHeader, transportHeader.length);
         }

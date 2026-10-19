@@ -32,11 +32,11 @@ public interface TelemetryParseRuleConfigMapper {
     List<TelemetryFilterSearchRecord> searchByTelemetryCode(@Param("taskId") String taskId,
             @Param("telemetryCode") String telemetryCode,
             @Param("selectionType") int selectionType, @Param("targetId") Long targetId);
-    /** 统计设备及可选系统子树中的有效参数。 */
+    /** 统计设备全部有效参数；指定系统时只统计该系统直属参数。 */
     long countPage(@Param("taskId") String taskId,
             @Param("deviceSatelliteId") Long deviceSatelliteId,
             @Param("systemId") Long systemId);
-    /** 分页查询设备及可选系统子树中的有效参数。 */
+    /** 分页查询设备全部有效参数；指定系统时只查询该系统直属参数。 */
     List<TelemetryParseRuleConfig> findPage(@Param("taskId") String taskId,
             @Param("deviceSatelliteId") Long deviceSatelliteId,
             @Param("systemId") Long systemId, @Param("limit") int limit,

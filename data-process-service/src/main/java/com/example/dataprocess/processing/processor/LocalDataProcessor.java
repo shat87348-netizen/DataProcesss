@@ -47,7 +47,7 @@ import java.util.regex.Pattern;
 public class LocalDataProcessor implements DataProcessor {
     /** 告警组件采用独立注入，复用已有离线构造入口。 */
     @org.springframework.beans.factory.annotation.Autowired
-    private com.example.dataprocess.service.DataAlarmRecorder alarmRecorder;
+    private com.example.dataprocess.alarm.DataAlarmRecorder alarmRecorder;
 
     /** 提交异常上下文，采集线程不直接写数据库。 */
     private void alarm(com.example.dataprocess.entity.CollectInterfaceRuntimeConfig config,

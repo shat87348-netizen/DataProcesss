@@ -76,7 +76,9 @@
         <where>
             s.is_deleted = 0
             <if test="name != null and name.trim() != ''">
-                AND s.source_name LIKE CONCAT('%', #{name}, '%')
+                <!-- 在MyBatis中生成包含匹配参数，兼容金仓数据库。 -->
+                <bind name="namePattern" value="'%' + name.trim() + '%'"/>
+                AND s.source_name LIKE #{namePattern}
             </if>
             <if test="status != null">
                 AND COALESCE(r.run_status, 0) = #{status}
@@ -90,7 +92,9 @@
         <where>
             s.is_deleted = 0
             <if test="name != null and name.trim() != ''">
-                AND s.source_name LIKE CONCAT('%', #{name}, '%')
+                <!-- 总数和分页使用一致的名称匹配条件。 -->
+                <bind name="namePattern" value="'%' + name.trim() + '%'"/>
+                AND s.source_name LIKE #{namePattern}
             </if>
             <if test="status != null">
                 AND COALESCE(r.run_status, 0) = #{status}

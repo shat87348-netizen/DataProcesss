@@ -17,12 +17,16 @@
                 and log_source = #{logSource}
             </if>
             <if test="operatorId != null and operatorId != ''">
-                and operator_id like '%' || #{operatorId} || '%'
+                <!-- 操作人筛选在MyBatis中生成包含匹配参数。 -->
+                <bind name="operatorIdPattern" value="'%' + operatorId + '%'"/>
+                and operator_id like #{operatorIdPattern}
             </if>
             <if test="keyword != null and keyword != ''">
+                <!-- 日志正文与详情复用相同的关键字匹配参数。 -->
+                <bind name="keywordPattern" value="'%' + keyword + '%'"/>
                 and (
-                    log_content like '%' || #{keyword} || '%'
-                    or log_detail like '%' || #{keyword} || '%'
+                    log_content like #{keywordPattern}
+                    or log_detail like #{keywordPattern}
                 )
             </if>
             <if test="startTime != null">

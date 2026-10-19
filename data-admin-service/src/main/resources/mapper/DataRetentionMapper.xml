@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.dataadmin.mapper.DataRetentionMapper">
+    <!-- 分类只允许由枚举提供，不通过字符串拼接表名或时间字段。 -->
+    <delete id="deleteExpiredBatch">
+        <choose>
+            <when test="category == 'collection'">
+                delete from collect_interface_statistics where id in (
+                    select id from collect_interface_statistics where statistics_time &lt; #{beforeTime}
+                    order by statistics_time, id limit #{limit})
+            </when>
+            <when test="category == 'processing'">
+                delete from data_processing_statistics where id in (
+                    select id from data_processing_statistics where statistics_time &lt; #{beforeTime}
+                    order by statistics_time, id limit #{limit})
+            </when>
+            <when test="category == 'system-monitor'">
+                delete from sys_monitor_snapshot where id in (
+                    select id from sys_monitor_snapshot where sample_time &lt; #{beforeTime}
+                    order by sample_time, id limit #{limit})
+            </when>
+            <when test="category == 'operation-log'">
+                delete from sys_runtime_log where id in (
+                    select id from sys_runtime_log where log_time &lt; #{beforeTime}
+                    order by log_time, id limit #{limit})
+            </when>
+            <when test="category == 'data-alarm'">
+                delete from dm_alarm_event where id in (
+                    select id from dm_alarm_event where alarm_time &lt; #{beforeTime}
+                    order by alarm_time, id limit #{limit})
+            </when>
+            <when test="category == 'system-alarm'">
+                delete from sys_alarm_event where id in (
+                    select id from sys_alarm_event where alarm_time &lt; #{beforeTime}
+                    order by alarm_time, id limit #{limit})
+            </when>
+            <when test="category == 'calibration-detail'">
+                <!-- 只删详情，校准汇总、主键及历史累计野值数全部保留。 -->
+                delete from calib_record_detail where id in (
+                    select id from calib_record_detail where create_time &lt; #{beforeTime}
+                    order by create_time, id limit #{limit})
+            </when>
+            <when test="category == 'file-record'">
+                delete from fep_file_transfer_record where id in (
+                    select id from fep_file_transfer_record where completed_time &lt; #{beforeTime}
+                    order by completed_time, id limit #{limit})
+            </when>
+            <otherwise>
+                <!-- 无效分类不允许删除任何数据。 -->
+                delete from sys_runtime_log where 1 = 0
+            </otherwise>
+        </choose>
+    </delete>
+
+</mapper>

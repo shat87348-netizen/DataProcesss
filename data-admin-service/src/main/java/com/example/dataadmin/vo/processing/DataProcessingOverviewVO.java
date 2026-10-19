@@ -6,7 +6,7 @@ public class DataProcessingOverviewVO {
     /** 今日成功完成处理的数据数量。 */
     private Long todayProcessedCount = 0L;
 
-    /** 当前试验任务全部历史累计去重数量。 */
+    /** 当前试验任务仍保留的统计记录累计去重数量。 */
     private Long deduplicatedCount = 0L;
 
     public Long getTodayProcessedCount() {

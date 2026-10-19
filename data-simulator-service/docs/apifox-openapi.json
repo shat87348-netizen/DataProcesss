@@ -132,7 +132,7 @@
             }
           },
           "409": {
-            "description": "名称重复、重复启动或运行中编辑等状态冲突",
+            "description": "名称重复、重复启动、运行中编辑、关联数据冲突或数据库未升级；展示后端具体message",
             "content": {
               "application/json": {
                 "schema": {
@@ -146,6 +146,22 @@
                     "message": {
                       "type": "string",
                       "description": "中文错误说明"
+                    }
+                  }
+                },
+                "examples": {
+                  "duplicateName": {
+                    "summary": "名称重复",
+                    "value": {
+                      "code": 409,
+                      "message": "模拟源名称已存在，请更换名称"
+                    }
+                  },
+                  "oldCheck": {
+                    "summary": "已有库未执行约束清理",
+                    "value": {
+                      "code": 409,
+                      "message": "模拟源数据库仍有旧校验约束，请执行最新模拟源建表升级脚本"
                     }
                   }
                 }
@@ -239,7 +255,7 @@
             }
           },
           "409": {
-            "description": "名称重复、重复启动或运行中编辑等状态冲突",
+            "description": "名称重复、重复启动、运行中编辑、关联数据冲突或数据库未升级；展示后端具体message",
             "content": {
               "application/json": {
                 "schema": {
@@ -253,6 +269,22 @@
                     "message": {
                       "type": "string",
                       "description": "中文错误说明"
+                    }
+                  }
+                },
+                "examples": {
+                  "duplicateName": {
+                    "summary": "名称重复",
+                    "value": {
+                      "code": 409,
+                      "message": "模拟源名称已存在，请更换名称"
+                    }
+                  },
+                  "oldCheck": {
+                    "summary": "已有库未执行约束清理",
+                    "value": {
+                      "code": 409,
+                      "message": "模拟源数据库仍有旧校验约束，请执行最新模拟源建表升级脚本"
                     }
                   }
                 }
@@ -388,7 +420,7 @@
             }
           },
           "409": {
-            "description": "名称重复、重复启动或运行中编辑等状态冲突",
+            "description": "名称重复、重复启动、运行中编辑、关联数据冲突或数据库未升级；展示后端具体message",
             "content": {
               "application/json": {
                 "schema": {
@@ -402,6 +434,22 @@
                     "message": {
                       "type": "string",
                       "description": "中文错误说明"
+                    }
+                  }
+                },
+                "examples": {
+                  "duplicateName": {
+                    "summary": "名称重复",
+                    "value": {
+                      "code": 409,
+                      "message": "模拟源名称已存在，请更换名称"
+                    }
+                  },
+                  "oldCheck": {
+                    "summary": "已有库未执行约束清理",
+                    "value": {
+                      "code": 409,
+                      "message": "模拟源数据库仍有旧校验约束，请执行最新模拟源建表升级脚本"
                     }
                   }
                 }
@@ -483,7 +531,7 @@
             }
           },
           "409": {
-            "description": "名称重复、重复启动或运行中编辑等状态冲突",
+            "description": "名称重复、重复启动、运行中编辑、关联数据冲突或数据库未升级；展示后端具体message",
             "content": {
               "application/json": {
                 "schema": {
@@ -497,6 +545,22 @@
                     "message": {
                       "type": "string",
                       "description": "中文错误说明"
+                    }
+                  }
+                },
+                "examples": {
+                  "duplicateName": {
+                    "summary": "名称重复",
+                    "value": {
+                      "code": 409,
+                      "message": "模拟源名称已存在，请更换名称"
+                    }
+                  },
+                  "oldCheck": {
+                    "summary": "已有库未执行约束清理",
+                    "value": {
+                      "code": 409,
+                      "message": "模拟源数据库仍有旧校验约束，请执行最新模拟源建表升级脚本"
                     }
                   }
                 }
@@ -590,7 +654,7 @@
             }
           },
           "409": {
-            "description": "名称重复、重复启动或运行中编辑等状态冲突",
+            "description": "名称重复、重复启动、运行中编辑、关联数据冲突或数据库未升级；展示后端具体message",
             "content": {
               "application/json": {
                 "schema": {
@@ -604,6 +668,22 @@
                     "message": {
                       "type": "string",
                       "description": "中文错误说明"
+                    }
+                  }
+                },
+                "examples": {
+                  "duplicateName": {
+                    "summary": "名称重复",
+                    "value": {
+                      "code": 409,
+                      "message": "模拟源名称已存在，请更换名称"
+                    }
+                  },
+                  "oldCheck": {
+                    "summary": "已有库未执行约束清理",
+                    "value": {
+                      "code": 409,
+                      "message": "模拟源数据库仍有旧校验约束，请执行最新模拟源建表升级脚本"
                     }
                   }
                 }
@@ -692,7 +772,7 @@
             }
           },
           "409": {
-            "description": "名称重复、重复启动或运行中编辑等状态冲突",
+            "description": "名称重复、重复启动、运行中编辑、关联数据冲突或数据库未升级；展示后端具体message",
             "content": {
               "application/json": {
                 "schema": {
@@ -706,6 +786,22 @@
                     "message": {
                       "type": "string",
                       "description": "中文错误说明"
+                    }
+                  }
+                },
+                "examples": {
+                  "duplicateName": {
+                    "summary": "名称重复",
+                    "value": {
+                      "code": 409,
+                      "message": "模拟源名称已存在，请更换名称"
+                    }
+                  },
+                  "oldCheck": {
+                    "summary": "已有库未执行约束清理",
+                    "value": {
+                      "code": 409,
+                      "message": "模拟源数据库仍有旧校验约束，请执行最新模拟源建表升级脚本"
                     }
                   }
                 }
@@ -794,7 +890,7 @@
             }
           },
           "409": {
-            "description": "名称重复、重复启动或运行中编辑等状态冲突",
+            "description": "名称重复、重复启动、运行中编辑、关联数据冲突或数据库未升级；展示后端具体message",
             "content": {
               "application/json": {
                 "schema": {
@@ -808,6 +904,22 @@
                     "message": {
                       "type": "string",
                       "description": "中文错误说明"
+                    }
+                  }
+                },
+                "examples": {
+                  "duplicateName": {
+                    "summary": "名称重复",
+                    "value": {
+                      "code": 409,
+                      "message": "模拟源名称已存在，请更换名称"
+                    }
+                  },
+                  "oldCheck": {
+                    "summary": "已有库未执行约束清理",
+                    "value": {
+                      "code": 409,
+                      "message": "模拟源数据库仍有旧校验约束，请执行最新模拟源建表升级脚本"
                     }
                   }
                 }
@@ -901,7 +1013,7 @@
             }
           },
           "409": {
-            "description": "名称重复、重复启动或运行中编辑等状态冲突",
+            "description": "名称重复、重复启动、运行中编辑、关联数据冲突或数据库未升级；展示后端具体message",
             "content": {
               "application/json": {
                 "schema": {
@@ -915,6 +1027,22 @@
                     "message": {
                       "type": "string",
                       "description": "中文错误说明"
+                    }
+                  }
+                },
+                "examples": {
+                  "duplicateName": {
+                    "summary": "名称重复",
+                    "value": {
+                      "code": 409,
+                      "message": "模拟源名称已存在，请更换名称"
+                    }
+                  },
+                  "oldCheck": {
+                    "summary": "已有库未执行约束清理",
+                    "value": {
+                      "code": 409,
+                      "message": "模拟源数据库仍有旧校验约束，请执行最新模拟源建表升级脚本"
                     }
                   }
                 }
@@ -1003,7 +1131,7 @@
             }
           },
           "409": {
-            "description": "名称重复、重复启动或运行中编辑等状态冲突",
+            "description": "名称重复、重复启动、运行中编辑、关联数据冲突或数据库未升级；展示后端具体message",
             "content": {
               "application/json": {
                 "schema": {
@@ -1017,6 +1145,22 @@
                     "message": {
                       "type": "string",
                       "description": "中文错误说明"
+                    }
+                  }
+                },
+                "examples": {
+                  "duplicateName": {
+                    "summary": "名称重复",
+                    "value": {
+                      "code": 409,
+                      "message": "模拟源名称已存在，请更换名称"
+                    }
+                  },
+                  "oldCheck": {
+                    "summary": "已有库未执行约束清理",
+                    "value": {
+                      "code": 409,
+                      "message": "模拟源数据库仍有旧校验约束，请执行最新模拟源建表升级脚本"
                     }
                   }
                 }

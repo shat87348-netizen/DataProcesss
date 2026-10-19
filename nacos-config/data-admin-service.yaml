@@ -75,7 +75,7 @@ subsystem:
     # 子系统图标标识，使用本系统约定的图标名称。
     icon: i-lucide-network
     # 填写当前环境可供外部系统访问的前端根地址，不包含末尾斜线。
-    base-url:
+    base-url: http://10.126.100.61:3000
     # 外部宿主系统首次打开本系统时使用的默认页面路径。
     default-path: /dashboard
 
@@ -114,8 +114,11 @@ springdoc:
 
 # 调度系统任务生命周期消息接收配置。
 rocketmq:
-  name-server: 127.0.0.1:9876
-
+  name-server: "10.126.100.201:9876;10.126.100.201:10876;10.126.100.201:11876;10.126.100.201:12876;10.126.100.201:13876;10.126.100.201:14876"
+  consumer:
+    # 填写有效的消费认证信息。
+    access-key: SJCLMQ
+    secret-key: SJCLMQ123
 task-lifecycle:
   # 调度系统发布任务生命周期消息的主题。
   topic: sydu-events
@@ -127,8 +130,6 @@ task-lifecycle:
 system-monitor:
   # 处理服务心跳正常判断时限，单位毫秒，应大于处理服务写入间隔。
   process-heartbeat-timeout-millis: 15000
-  # 系统状态快照保留天数。
-  snapshot-retention-days: 7
   # CPU 使用率告警阈值，单位：百分比。
   cpu-warning-percent: 85
   # 内存使用率告警阈值，单位：百分比。
@@ -140,15 +141,12 @@ system-monitor:
 
 # 当前数据处理结果主题的RocketMQ积压监控配置。
 rocketmq-monitor:
-  name-server: 10.126.100.247:9876
-  topic: telemetry-framed-send
+  name-server: "10.126.100.201:9876;10.126.100.201:10876;10.126.100.201:11876;10.126.100.201:12876;10.126.100.201:13876;10.126.100.201:14876"
+  topic: topic_yc_out_sjcl
   # 必须配置实际下游消费者组，否则无法计算消费积压量。
   consumer-group:
-  access-key:
-  secret-key:
-
-calibration:
-  curve-retention-days: 7
+  access-key: SJCLMQ
+  secret-key: SJCLMQ123
 
 iotdb:
   host: 127.0.0.1
@@ -169,8 +167,46 @@ satellite-management:
 
 # 管理服务在采集接口配置提交后通知数据处理服务同步运行任务。
 data-processing:
+  # HTTP完整接收地址的访问协议，反向代理使用HTTPS时修改为https；配置管理不创建监听端口。
+  http:
+    scheme: http
   interface-sync-url: http://127.0.0.1:8083/internal/collection/interfaces/sync
   # 内部接口连接超时时间，单位毫秒。
   interface-sync-connect-timeout-millis: 5000
   # 内部接口响应读取超时时间，单位毫秒。
   interface-sync-read-timeout-millis: 10000
+
+# 业务数据过期删除配置；不填或留空不删除，填写正整数时按天保留。
+# 每小时第15分钟分批物理删除；变更后重启管理服务生效，采集处理累计数量按剩余记录计算。
+data-retention:
+  # 采集五秒统计及采集曲线保留天数。
+  collection-statistics-days: 30
+  # 处理五秒统计及处理曲线保留天数。
+  processing-statistics-days: 30
+  # CPU、内存、磁盘等系统资源快照保留天数。
+  system-monitor-days: 30
+  # 日志管理中的操作日志保留天数。
+  operation-log-days: 30
+  # 数据告警保留天数，以首次告警时间为准，包含已处理和未处理记录。
+  data-alarm-days: 30
+  # 系统告警保留天数，以告警时间为准，包含活动和已恢复记录。
+  system-alarm-days: 30
+  # 野值详情保留天数，以发生时间为准；汇总记录和历史累计野值数保持不变。
+  calibration-days: 30
+  # 文件和图片数据库记录保留天数，以接收完成时间为准；不删除MinIO对象。
+  file-record-days: 30
+
+# 图片和文件查询的临时签名配置，账号和存储桶与处理服务保持一致。
+minio:
+  # 必须为浏览器可达的对象存储API根地址；当前示例为本开发机局域网地址，部署时替换。
+  public-url: http://10.126.100.107:9002
+  # 签名账号仅供后端使用，不返回前端。
+  access-key: minioadmin
+  # 签名密码仅供后端使用，不返回前端。
+  secret-key: minioadmin123
+  # 必须与处理服务上传文件使用的桶一致。
+  bucket-name: fep-files
+  # 必须与MinIO实际区域一致，未单独设置时通常为us-east-1，签名无需在线查询区域。
+  region: us-east-1
+  # 临时地址有效期，单位秒，允许1至604800；默认一小时。
+  url-expiry-seconds: 3600

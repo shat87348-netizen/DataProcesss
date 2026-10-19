@@ -2,17 +2,26 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.example.dataadmin.mapper.IoTDBFrameQueryMapper">
-    <!-- 实时整帧只读取新路径中保留的四个测点。 -->
+    <!-- 正常帧列表和计数共用条件，状态仅由已有枚举提供。 -->
+    <sql id="normalFrameCondition">
+        <where>
+            checkResultName = '${normalStatus}'
+        </where>
+    </sql>
+
+    <!-- 实时整帧只读取检查正常的四个测点。 -->
     <select id="realtimeFrames" resultType="map">
         select deviceSatelliteName, channelName, raw, checkResultName
         from ${devicePath}
-        order by time desc limit ${limit} offset ${offset} align by device
+        <include refid="normalFrameCondition"/>
+        order by time desc, device asc limit ${limit} offset ${offset} align by device
     </select>
 
-    <!-- 统计任务和设备卫星范围内的实时整帧数量。 -->
+    <!-- 仅统计任务和采集接口范围内检查正常的整帧数量。 -->
     <select id="countRealtimeFrames" resultType="map">
         select count(raw) as total
         from ${devicePath}
+        <include refid="normalFrameCondition"/>
         align by device
     </select>
 
@@ -23,7 +32,8 @@
         <where>
             value is not null
         </where>
-        order by time desc limit 1 align by device
+        <!-- 同一代号存在历史多路径时统一按时间取最新，避免先取到旧设备的数据。 -->
+        order by time desc, device asc limit 1 align by device
     </select>
 
     <!-- 单个已勾选参数查询最新的一百二十条原始曲线点。 -->
@@ -33,7 +43,8 @@
         <where>
             value is not null
         </where>
-        order by time desc limit 120 align by device
+        <!-- 通配匹配多个来源时仍只返回时间最新的一百二十个有效点。 -->
+        order by time desc, device asc limit 120 align by device
     </select>
 
     <!-- 异常整帧依据中文检查结果筛选。 -->
@@ -43,7 +54,7 @@
         <where>
             checkResultName != '正常'
         </where>
-        order by time desc limit ${limit} offset ${offset} align by device
+        order by time desc, device asc limit ${limit} offset ${offset} align by device
     </select>
 
     <!-- 统计页面筛选条件下的异常整帧数量。 -->

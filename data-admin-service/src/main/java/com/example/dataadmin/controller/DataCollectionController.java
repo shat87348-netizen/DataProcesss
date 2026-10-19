@@ -6,6 +6,7 @@ import com.example.dataadmin.dto.IdRequest;
 import com.example.dataadmin.dto.collection.EnabledUpdateRequest;
 import com.example.dataadmin.dto.collection.InterfaceQueryRequest;
 import com.example.dataadmin.dto.collection.InterfaceSaveRequest;
+import com.example.dataadmin.dto.collection.ProtocolQueryRequest;
 import com.example.dataadmin.dto.collection.ProtocolSaveRequest;
 import com.example.dataadmin.entity.CollectInterfaceConfig;
 import com.example.dataadmin.enums.ControllerEnumData;
@@ -106,12 +107,13 @@ public class DataCollectionController {
         return ApiResponse.success();
     }
 
-    /** 查询协议配置列表。 */
+    /** 按任务、协议类型和名称分页查询协议配置。 */
     @GetMapping("/protocols")
-    public ApiResponse<List<ProtocolConfigVO>> listProtocols(
-            @RequestParam(required = false) String taskId) {
+    public ApiResponse<PageResult<ProtocolConfigVO>> listProtocols(
+            @Valid @ModelAttribute ProtocolQueryRequest request) {
+        // 复用统一分页响应，前端从当前页记录中展示和选择协议。
         return ApiResponse.success(
-                dataCollectionService.listProtocolConfigs(taskId));
+                dataCollectionService.pageProtocolConfigs(request));
     }
 
     /** 查询协议配置详情。 */

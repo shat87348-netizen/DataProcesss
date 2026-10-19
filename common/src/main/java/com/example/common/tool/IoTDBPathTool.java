@@ -55,6 +55,21 @@ public final class IoTDBPathTool {
         return pathNode(normalized, "unknown_channel");
     }
 
+    /** 按RPC返回的卫星、通道生成独立身份节点，保持帧查询使用的原有路径层级。 */
+    public static String rpcDeviceNode(String satelliteCode, String channelCode) {
+        // 第一步：身份必须完整，不使用未知节点或本地设备主键替代远程编码。
+        String satellite = satelliteCode == null ? "" : satelliteCode.trim();
+        String channel = channelCode == null ? "" : channelCode.trim();
+        if (satellite.isEmpty() || channel.isEmpty()) {
+            throw new IllegalArgumentException("RPC入库缺少返回的卫星代号或通道代号");
+        }
+        // 第二步：保留编码长度，避免不同卫星、通道组合因分隔符产生相同原始身份。
+        String identity = satellite.length() + "_" + satellite
+                + "_" + channel.length() + "_" + channel;
+        // 第三步：复用已有特殊字符转义规则，独立前缀避免与本地设备节点混淆。
+        return prefixedPathNode("rpc_", identity, "unknown_rpc");
+    }
+
     /** 保证回退节点始终是非空安全标识。 */
     private static String normalizeFallback(String fallback) {
         if (fallback == null || fallback.trim().isEmpty()) {

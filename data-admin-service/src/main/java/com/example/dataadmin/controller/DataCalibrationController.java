@@ -6,11 +6,11 @@ import com.example.dataadmin.dto.IdRequest;
 import com.example.dataadmin.dto.calibration.CalibrationChannelEnabledRequest;
 import com.example.dataadmin.dto.calibration.ChannelSaveRequest;
 import com.example.dataadmin.entity.CalibChannelConfig;
-import com.example.dataadmin.entity.CalibRecord;
 import com.example.dataadmin.enums.ControllerEnumData;
 import com.example.dataadmin.service.DataCalibrationService;
 import com.example.dataadmin.vo.EnumOptionVO;
 import com.example.dataadmin.vo.calibration.CalibRecordDetailVO;
+import com.example.dataadmin.vo.calibration.CalibRecordListVO;
 import com.example.dataadmin.vo.calibration.CalibrationOverviewVO;
 import org.springframework.beans.BeanUtils;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -45,11 +45,11 @@ public class DataCalibrationController {
         return ApiResponse.success(ControllerEnumData.calibration());
     }
 
-    /** 查询当前试验任务累计检出的野值数量。 */
+    /** 查询当前试验任务累计校准、清洗及野值数量。 */
     @GetMapping("/overview")
     public ApiResponse<CalibrationOverviewVO> getOverview(
             @RequestParam String taskId) {
-        // 校准总览必须限定试验任务，避免跨任务累计野值数量。
+        // 校准总览必须限定试验任务，避免跨任务累计校准、清洗及野值数量。
         return ApiResponse.success(calibrationService.getOverview(taskId));
     }
 
@@ -109,12 +109,13 @@ public class DataCalibrationController {
         return ApiResponse.success();
     }
 
-    /** 查询校准记录。 */
+    /** 分页查询校准记录及每条记录的累计校准数量。 */
     @GetMapping("/records")
-    public ApiResponse<PageResult<CalibRecord>> listRecords(
+    public ApiResponse<PageResult<CalibRecordListVO>> listRecords(
             @RequestParam String taskId,
             @RequestParam(defaultValue = "1") Integer pageNum,
             @RequestParam(defaultValue = "20") Integer pageSize) {
+        // 返回列表专用对象，复用现有分页并补充通道累计校准数量。
         return ApiResponse.success(
                 calibrationService.pageCalibRecords(taskId, pageNum, pageSize));
     }

@@ -232,7 +232,7 @@ COMMENT ON COLUMN sys_alarm_event.is_deleted IS '是否删除：0否 1是';
 COMMENT ON COLUMN sys_alarm_event.create_time IS '创建时间';
 COMMENT ON COLUMN sys_alarm_event.update_time IS '更新时间';
 
--- 系统健康状态快照表：每 5 秒采集一次，仅保留最近 7 天。
+-- 系统健康状态快照表：每5秒采集一次，保留天数由数据清理配置决定。
 -- 此表与已有数据监测告警表完全独立，不能混用。
 
 COMMENT ON COLUMN sys_alarm_event.metric_code IS '系统监测指标编码';
@@ -518,6 +518,7 @@ CREATE TABLE IF NOT EXISTS collect_interface_config (
     host VARCHAR(100) NOT NULL,
     port INT NOT NULL,
     multicast_ip VARCHAR(100),
+    receive_path VARCHAR(255),
     status SMALLINT NOT NULL DEFAULT 1,
     enabled SMALLINT NOT NULL DEFAULT 1,
     rpc_enabled SMALLINT NOT NULL DEFAULT 0,
@@ -538,12 +539,26 @@ COMMENT ON COLUMN collect_interface_config.message_content IS '消息内容';
 COMMENT ON COLUMN collect_interface_config.transfer_type IS '传输方式：1UDP 2TCP 3HTTP';
 COMMENT ON COLUMN collect_interface_config.transfer_protocol IS '传输协议：1JSON 2PDXP 3FEP';
 COMMENT ON COLUMN collect_interface_config.protocol_config_id IS '协议配置ID';
-COMMENT ON COLUMN collect_interface_config.host IS '数据处理服务本机监听网卡IP地址';
-COMMENT ON COLUMN collect_interface_config.port IS '数据处理服务本机监听端口';
+COMMENT ON COLUMN collect_interface_config.host IS 'UDP或TCP本机监听地址，HTTP对外接收IP或域名';
+COMMENT ON COLUMN collect_interface_config.port IS 'UDP或TCP本机监听端口，HTTP对外接收端口';
 COMMENT ON COLUMN collect_interface_config.multicast_ip IS 'UDP组播地址，为空时按UDP单播接收';
 COMMENT ON COLUMN collect_interface_config.status IS '在线状态：0离线 1在线，由启用状态决定';
 COMMENT ON COLUMN collect_interface_config.enabled IS '启用状态：0禁用 1启用';
-COMMENT ON COLUMN collect_interface_config.data_packet_count IS '累计数据包数量';
+COMMENT ON COLUMN collect_interface_config.data_packet_count IS '长期累计采集量，PDXP按完整帧、FEP按完整文件计数';
+-- 升级为持久累计计数前，先停止采集写入，再手工执行一次下列存量回填。
+-- 只补零值接口，避免重新运行建表脚本时覆盖已经产生的长期累计量。
+-- 已被保留策略物理删除的五秒窗口无法从数据库补回。
+-- UPDATE collect_interface_config interface_config
+-- SET data_packet_count = historical.total_count
+-- FROM (
+--     SELECT task_id, interface_id, sum(collection_count) AS total_count
+--     FROM collect_interface_statistics
+--     WHERE is_deleted = 0
+--     GROUP BY task_id, interface_id
+-- ) historical
+-- WHERE interface_config.id = historical.interface_id
+--   AND interface_config.task_id = historical.task_id
+--   AND coalesce(interface_config.data_packet_count, 0) = 0;
 COMMENT ON COLUMN collect_interface_config.remark IS '接口备注';
 COMMENT ON COLUMN collect_interface_config.is_deleted IS '是否删除：0否 1是';
 COMMENT ON COLUMN collect_interface_config.create_time IS '创建时间';
@@ -557,13 +572,22 @@ ALTER TABLE collect_interface_config
 
 COMMENT ON COLUMN collect_interface_config.rpc_enabled IS '是否启用RPC处理：0否 1是';
 
+-- 为已有库补充HTTP接收路径，所有未删除HTTP配置的路径保持唯一。
+ALTER TABLE collect_interface_config
+    ADD COLUMN IF NOT EXISTS receive_path VARCHAR(255);
+
+COMMENT ON COLUMN collect_interface_config.receive_path IS 'HTTP采集接口接收路径，其他传输方式为空';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_collect_interface_http_receive_path
+    ON collect_interface_config (receive_path)
+    WHERE transfer_type = 3 AND is_deleted = 0;
+
 -- 协议配置表
 CREATE TABLE IF NOT EXISTS collect_protocol_config (
     id BIGSERIAL PRIMARY KEY,
     task_id VARCHAR(100),
     config_name VARCHAR(100) NOT NULL,
     protocol_type SMALLINT NOT NULL,
-    data_source_type SMALLINT NOT NULL DEFAULT 1,
     config_desc VARCHAR(500),
     config_params TEXT,
     parser_class VARCHAR(200),
@@ -573,12 +597,14 @@ CREATE TABLE IF NOT EXISTS collect_protocol_config (
     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
+-- 删除已取消的数据源分类字段，已有协议参数保持不变。
+ALTER TABLE collect_protocol_config DROP COLUMN IF EXISTS data_source_type;
+
 COMMENT ON TABLE collect_protocol_config IS '协议配置表';
 COMMENT ON COLUMN collect_protocol_config.id IS '自增主键';
 COMMENT ON COLUMN collect_protocol_config.task_id IS '外部试验任务编号';
 COMMENT ON COLUMN collect_protocol_config.config_name IS '配置名称';
 COMMENT ON COLUMN collect_protocol_config.protocol_type IS '协议类型：1JSON 2PDXP 3Protobuf 4RPC';
-COMMENT ON COLUMN collect_protocol_config.data_source_type IS '数据源类型：1遥测 2遥感 3设备 4环境';
 COMMENT ON COLUMN collect_protocol_config.config_desc IS '描述';
 COMMENT ON COLUMN collect_protocol_config.config_params IS '协议配置参数';
 COMMENT ON COLUMN collect_protocol_config.parser_class IS '协议解析处理类';
@@ -599,7 +625,7 @@ CREATE TABLE IF NOT EXISTS fep_file_transfer_record (
     file_length BIGINT NOT NULL,
     local_path VARCHAR(1000) NOT NULL,
     object_name VARCHAR(1000) NOT NULL,
-    file_url VARCHAR(2000) NOT NULL,
+    file_url VARCHAR(2000),
     process_status SMALLINT NOT NULL DEFAULT 1,
     retry_count INT NOT NULL DEFAULT 0,
     last_error VARCHAR(2000),
@@ -613,6 +639,10 @@ CREATE TABLE IF NOT EXISTS fep_file_transfer_record (
 ALTER TABLE fep_file_transfer_record
     ADD COLUMN IF NOT EXISTS file_type VARCHAR(50);
 
+-- 已有环境允许接收登记阶段的文件地址为空，上传成功后再回填；可重复执行。
+ALTER TABLE fep_file_transfer_record
+    ALTER COLUMN file_url DROP NOT NULL;
+
 COMMENT ON TABLE fep_file_transfer_record IS 'FEP文件接收和后续处理记录表';
 COMMENT ON COLUMN fep_file_transfer_record.id IS '记录主键ID';
 COMMENT ON COLUMN fep_file_transfer_record.task_id IS '外部试验任务编号';
@@ -622,7 +652,7 @@ COMMENT ON COLUMN fep_file_transfer_record.file_type IS '文件后缀，小写�
 COMMENT ON COLUMN fep_file_transfer_record.file_length IS '文件字节长度';
 COMMENT ON COLUMN fep_file_transfer_record.local_path IS '本地完整文件路径';
 COMMENT ON COLUMN fep_file_transfer_record.object_name IS '对象存储中的对象名称';
-COMMENT ON COLUMN fep_file_transfer_record.file_url IS '文件对外访问地址';
+COMMENT ON COLUMN fep_file_transfer_record.file_url IS '文件对外访问地址；已接收未上传时允许为空，上传成功后回填';
 COMMENT ON COLUMN fep_file_transfer_record.process_status IS '处理状态：1已接收 2已上传 3已发布';
 COMMENT ON COLUMN fep_file_transfer_record.retry_count IS '后续处理失败次数';
 COMMENT ON COLUMN fep_file_transfer_record.last_error IS '最近一次失败原因';
@@ -760,6 +790,15 @@ WHERE widget.widget_type IN (1, 2) AND item.is_selected = 1
   AND rule_config.is_deleted = 0
 ON CONFLICT (task_id, selection_type, target_id, device_satellite_id, telemetry_code)
 DO NOTHING;
+
+-- 按时间分批清理使用全局索引，包含已逻辑删除的历史记录。
+CREATE INDEX IF NOT EXISTS idx_collect_statistics_retention ON collect_interface_statistics (statistics_time, id);
+CREATE INDEX IF NOT EXISTS idx_processing_statistics_retention ON data_processing_statistics (statistics_time, id);
+CREATE INDEX IF NOT EXISTS idx_monitor_snapshot_retention ON sys_monitor_snapshot (sample_time, id);
+CREATE INDEX IF NOT EXISTS idx_runtime_log_retention ON sys_runtime_log (log_time, id);
+CREATE INDEX IF NOT EXISTS idx_data_alarm_retention ON dm_alarm_event (alarm_time, id);
+CREATE INDEX IF NOT EXISTS idx_system_alarm_retention ON sys_alarm_event (alarm_time, id);
+CREATE INDEX IF NOT EXISTS idx_fep_file_retention ON fep_file_transfer_record (completed_time, id);
 
 COMMIT;
 

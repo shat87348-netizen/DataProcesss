@@ -21,11 +21,11 @@
         where record.task_id = #{taskId} and record.process_status in (2, 3)
         <include refid="categoryFilter"/>
     </select>
-    <!-- 历史采集接口删除后仍保留文件，接口名称允许为空。 -->
+    <!-- 历史采集接口删除后仍保留文件；只读取对象名称，临时地址由查询服务即时生成。 -->
     <select id="findPage" resultType="com.example.dataadmin.vo.visualization.FepFileListItemVO">
         select record.id, record.interface_id, collect.interface_name,
                record.file_name, record.file_type, record.file_length,
-               record.file_url, record.completed_time
+               record.object_name, record.completed_time
         from fep_file_transfer_record record
         left join collect_interface_config collect
           on collect.id = record.interface_id and collect.task_id = record.task_id

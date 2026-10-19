@@ -19,4 +19,10 @@ public interface CalibrationProcessingMapper {
     int incrementRecordOutlierCount(
             @Param("channelId") Long channelId,
             @Param("outlierCount") Integer outlierCount);
+
+    /** 按任务及校准通道累加参与校准的遥测参数数量。 */
+    int incrementRecordCalibrationCount(
+            @Param("taskId") String taskId,
+            @Param("channelId") Long channelId,
+            @Param("calibrationCount") Long calibrationCount);
 }

@@ -77,10 +77,6 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
     private final Map<String, Integer> breachCounts =
             new HashMap<String, Integer>();
 
-    /** 系统状态快照保留天数，默认保留 7 天。 */
-    @Value("${system-monitor.snapshot-retention-days}")
-    private int retentionDays;
-
     /** CPU 使用率告警阈值，单位为百分比，默认 85%。 */
     @Value("${system-monitor.cpu-warning-percent}")
     private double cpuThreshold;
@@ -172,13 +168,6 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
         }
     }
 
-    /** 每天清理七天前的系统状态快照。 */
-    @Scheduled(cron = "0 15 3 * * *")
-    @Transactional
-    public void clearExpiredSystemMonitorSnapshots() {
-        snapshotMapper.deleteBefore(LocalDateTime.now().minusDays(retentionDays));
-    }
-
     @Override
     public SysMonitorSnapshot getSystemMonitorCurrent() {
         // 页面主动查询时即时采集，避免缓存掩盖接口开关和服务状态变化。
@@ -188,8 +177,8 @@ public class AlarmManagementServiceImpl implements AlarmManagementService {
     @Override
     public List<SysMonitorSnapshot> getSystemMonitorHistory(
             int minutes) {
-        int maximum = retentionDays * 24 * 60;
-        int safeMinutes = Math.max(1, Math.min(minutes, maximum));
+        // 查询区间与保留策略独立，留空保留天数时仍允许查询已有历史数据。
+        int safeMinutes = Math.max(1, minutes);
         return snapshotMapper.findHistory(
                 LocalDateTime.now().minusMinutes(safeMinutes));
     }

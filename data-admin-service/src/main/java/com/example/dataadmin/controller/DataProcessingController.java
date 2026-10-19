@@ -74,13 +74,13 @@ public class DataProcessingController {
     @GetMapping("/realtime/telemetry")
     public ApiResponse<PageResult<RealtimeTelemetryFrameVO>> pageRealtimeTelemetry(
             @RequestParam String taskId,
-            @RequestParam(required = false) Long deviceSatelliteId,
+            @RequestParam(required = false) Long interfaceId,
             @RequestParam(defaultValue = "1") Integer pageNum,
             @RequestParam(defaultValue = "20") Integer pageSize) {
         // 查询参数统一交给业务层校验并转换为IoTDB分页范围。
         return ApiResponse.success(
                 processingService.pageRealtimeTelemetryFrames(
-                        taskId, deviceSatelliteId, pageNum, pageSize));
+                        taskId, interfaceId, pageNum, pageSize));
     }
 
     /** 查询当前任务全部已勾选参数的最新处理结果。 */
@@ -109,14 +109,14 @@ public class DataProcessingController {
     @GetMapping("/realtime/invalid")
     public ApiResponse<PageResult<InvalidTelemetryFrame>> pageInvalidTelemetry(
             @RequestParam String taskId,
-            @RequestParam(required = false) Long deviceSatelliteId,
+            @RequestParam(required = false) Long interfaceId,
             @RequestParam(defaultValue = "1") Integer pageNum,
             @RequestParam(defaultValue = "20") Integer pageSize) {
         // 查询参数统一交给业务层校验并转换为IoTDB分页范围。
         return ApiResponse.success(
                 processingService.pageInvalidTelemetryFrames(
                         taskId,
-                        deviceSatelliteId,
+                        interfaceId,
                         pageNum,
                         pageSize));
     }

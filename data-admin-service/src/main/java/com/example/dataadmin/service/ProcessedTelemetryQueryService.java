@@ -4,6 +4,7 @@ import com.example.common.tool.IoTDBPathTool;
 import com.example.dataadmin.config.IoTDBQueryConfig;
 import com.example.dataadmin.entity.ProcessedTelemetryFilterSelection;
 import com.example.dataadmin.enums.BusinessEnums;
+import com.example.dataadmin.enums.DeviceSatelliteType;
 import com.example.dataadmin.mapper.IoTDBFrameQueryMapper;
 import com.example.dataadmin.mapper.ProcessedTelemetryFilterSelectionMapper;
 import com.example.dataadmin.vo.processing.ProcessedTelemetryCurveVO;
@@ -146,13 +147,25 @@ public class ProcessedTelemetryQueryService {
         }
     }
 
-    /** 将已勾选参数转换为任务、设备、遥测类型和代号路径。 */
+    /** 设备按本地主键查询，卫星按RPC身份前缀和已勾选遥测代号查询。 */
     private String path(ProcessedTelemetryFilterSelection item) {
+        // 第一步：复用设备卫星类型枚举，类型从勾选所属资料读取，不由前端重复传入。
+        String identityNode;
+        if (DeviceSatelliteType.SATELLITE.getValue().equals(item.getDeviceSatelliteType())) {
+            identityNode = "rpc_*";
+        } else if (DeviceSatelliteType.DEVICE.getValue().equals(item.getDeviceSatelliteType())) {
+            if (item.getDeviceSatelliteId() == null || item.getDeviceSatelliteId() <= 0) {
+                throw new IllegalStateException("已勾选设备参数缺少有效设备主键");
+            }
+            identityNode = IoTDBPathTool.prefixedPathNode("device_",
+                    String.valueOf(item.getDeviceSatelliteId()), "unknown_device");
+        } else {
+            throw new IllegalStateException("已勾选参数的设备卫星类型不正确");
+        }
+        // 第二步：始终限定当前任务和遥测代号，类型通配只在所选设备或RPC身份下生效。
         return "root.db."
                 + IoTDBPathTool.prefixedPathNode("task_", item.getTaskId(), "unknown_task")
-                + "." + IoTDBPathTool.prefixedPathNode("device_",
-                        String.valueOf(item.getDeviceSatelliteId()), "unknown_device")
-                + ".tms.*."
+                + "." + identityNode + ".tms.*."
                 + IoTDBPathTool.pathNode(item.getTelemetryCode(), "unknown_tm");
     }
 

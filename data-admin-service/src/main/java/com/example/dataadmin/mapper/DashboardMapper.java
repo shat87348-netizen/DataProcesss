@@ -27,9 +27,4 @@ public interface DashboardMapper {
   /** 查询采集接口配置，用于补充系统接口、协议和状态信息。 */
   List<CollectInterfaceConfig> findInterfaces(@Param("taskId") String taskId);
 
-  /** 逻辑删除保留时间之前的采集统计。 */
-  int deleteCollectionStatisticsBefore(@Param("beforeTime") LocalDateTime beforeTime);
-
-  /** 逻辑删除保留时间之前的处理统计。 */
-  int deleteProcessingStatisticsBefore(@Param("beforeTime") LocalDateTime beforeTime);
 }

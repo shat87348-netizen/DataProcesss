@@ -14,8 +14,10 @@
                 and source_name = #{sourceCode}
             </if>
             <if test="keyword != null and keyword != ''">
+                <!-- 所有告警字段共用同一个包含匹配参数，避免依赖数据库拼接运算符。 -->
+                <bind name="keywordPattern" value="'%' + keyword + '%'"/>
                 and (
-                    source_name like '%' || #{keyword} || '%'
+                    source_name like #{keywordPattern}
                     <!-- 中文来源名称先由枚举转换成编码，仅有匹配项时增加筛选。 -->
                     <if test="sourceKeywordValues != null and sourceKeywordValues.size() &gt; 0">
                         or source_name in
@@ -23,13 +25,13 @@
                             #{sourceValue}
                         </foreach>
                     </if>
-                    or alarm_msg like '%' || #{keyword} || '%'
-                    or task_name like '%' || #{keyword} || '%'
-                    or channel_code like '%' || #{keyword} || '%'
-                    or trigger_rule like '%' || #{keyword} || '%'
-                    or parameter_name like '%' || #{keyword} || '%'
-                    or tm_symbol like '%' || #{keyword} || '%'
-                    or alarm_detail like '%' || #{keyword} || '%'
+                    or alarm_msg like #{keywordPattern}
+                    or task_name like #{keywordPattern}
+                    or channel_code like #{keywordPattern}
+                    or trigger_rule like #{keywordPattern}
+                    or parameter_name like #{keywordPattern}
+                    or tm_symbol like #{keywordPattern}
+                    or alarm_detail like #{keywordPattern}
                 )
             </if>
             <if test="alarmLevel != null">

@@ -25,6 +25,8 @@ public class InterfaceSaveRequest {
     private String interfaceName;
 
     @NotNull(message = "接口类型不能为空")
+    @Min(value = 1, message = "接口类型只能为1或2")
+    @Max(value = 2, message = "接口类型只能为1或2")
     /** 接口类型：1 外部接口，2 内部接口。 */
     private Integer interfaceType;
 
@@ -37,6 +39,8 @@ public class InterfaceSaveRequest {
     private String messageContent;
 
     @NotNull(message = "传输方式不能为空")
+    @Min(value = 1, message = "传输方式只能为1到3")
+    @Max(value = 3, message = "传输方式只能为1到3")
     /** 传输方式：1 UDP，2 TCP，3 HTTP。 */
     private Integer transferType;
 
@@ -46,28 +50,32 @@ public class InterfaceSaveRequest {
     @Max(value = 3, message = "传输协议只能为1到3")
     private Integer transferProtocol;
 
-    /** 关联协议配置 ID。 */
+    /** 关联协议配置主键：HTTP必选JSON，FEP省略；其他协议处理选PDXP，转发选RPC。 */
     private Long protocolConfigId;
 
     @NotBlank(message = "主机地址不能为空")
     @Size(max = 100, message = "主机地址不能超过100个字符")
-    /** 数据处理服务本机监听地址。 */
+    /** UDP、TCP使用本机监听地址；HTTP使用对外接收IP或域名。 */
     private String host;
 
     @NotNull(message = "端口号不能为空")
     @Min(value = 1, message = "端口号不能小于1")
     @Max(value = 65535, message = "端口号不能大于65535")
-    /** 数据处理服务本机监听端口。 */
+    /** UDP、TCP使用本机监听端口；HTTP使用对外接收端口。 */
     private Integer port;
 
     /** UDP组播地址；为空时按UDP单播接收。 */
     @Size(max = 100, message = "组播地址不能超过100个字符")
     private String multicastIp;
 
+    /** HTTP接收路径；其他传输方式不使用，保存时清空。 */
+    @Size(max = 255, message = "HTTP接收路径不能超过255个字符")
+    private String receivePath;
+
     /** 是否启用：0 否，1 是。 */
     private Integer enabled;
 
-    /** 是否启用RPC处理：0否 1是。 */
+    /** 处理方式：HTTP和FEP可省略且固定保存0；其他协议0处理、1转发，默认0。 */
     @Min(value = 0, message = "RPC处理开关不能小于0")
     @Max(value = 1, message = "RPC处理开关不能大于1")
     private Integer rpcEnabled;
@@ -174,6 +182,16 @@ public class InterfaceSaveRequest {
 
     public Integer getEnabled() {
         return enabled;
+    }
+
+    /** 获取HTTP采集接口的接收路径。 */
+    public String getReceivePath() {
+        return receivePath;
+    }
+
+    /** 接收前端填写的路径，规范化与必填校验由业务层统一处理。 */
+    public void setReceivePath(String receivePath) {
+        this.receivePath = receivePath;
     }
 
     public void setEnabled(Integer enabled) {

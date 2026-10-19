@@ -34,17 +34,21 @@ public class CollectInterfaceConfig {
     /** 详情展示使用的协议配置名称，不参与新增和修改入库。 */
     private String protocolConfigName;
 
-    /** 数据处理服务本机监听网卡IP地址。 */
+    /** UDP、TCP本机监听地址；HTTP对外接收IP或域名。 */
     private String host;
-    /** 数据处理服务本机监听端口。 */
+    /** UDP、TCP本机监听端口；HTTP对外接收端口。 */
     private Integer port;
     /** UDP组播地址，为空时按单播接收。 */
     private String multicastIp;
+    /** HTTP采集接口接收路径，其他传输方式为空。 */
+    private String receivePath;
+    /** 根据系统访问协议、对外地址、端口和路径计算，不入库。 */
+    private String receiveUrl;
     /** 启用状态：0禁用 1启用。 */
     private Integer enabled;
     /** 是否启用RPC处理：0否 1是。 */
     private Integer rpcEnabled;
-    /** 累计数据包数量。 */
+    /** 长期累计采集量，PDXP按完整帧、FEP按完整文件计数。 */
     private Long dataPacketCount;
     /** 分页列表返回的最新采集速率，单位KB/s，不参与配置入库。 */
     private Double interfaceRateKbps;
@@ -191,6 +195,27 @@ public class CollectInterfaceConfig {
 
     public Integer getEnabled() {
         return enabled;
+    }
+
+    /** 返回配置中保存的HTTP接收路径。 */
+    public String getReceivePath() {
+        return receivePath;
+    }
+
+    /** 接收保存或查询得到的HTTP接收路径。 */
+    public void setReceivePath(String receivePath) {
+        this.receivePath = receivePath;
+    }
+
+    /** 仅HTTP配置在地址完整时返回完整接收地址。 */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public String getReceiveUrl() {
+        return receiveUrl;
+    }
+
+    /** 由业务层回填完整接收地址，不作为数据库字段。 */
+    public void setReceiveUrl(String receiveUrl) {
+        this.receiveUrl = receiveUrl;
     }
 
     public void setEnabled(Integer enabled) {

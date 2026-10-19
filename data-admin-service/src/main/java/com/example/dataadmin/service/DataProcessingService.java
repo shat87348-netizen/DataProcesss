@@ -29,7 +29,7 @@ public interface DataProcessingService {
     /** 按任务和设备卫星分页筛选IoTDB中的数据域整帧。 */
     PageResult<RealtimeTelemetryFrameVO> pageRealtimeTelemetryFrames(
             String taskId,
-            Long deviceSatelliteId,
+            Long interfaceId,
             Integer pageNum,
             Integer pageSize);
     /** 查询当前任务全部已勾选参数的最新处理结果。 */
@@ -41,7 +41,7 @@ public interface DataProcessingService {
     /** 按任务和页面条件分页筛选帧检查异常的遥测原始帧。 */
     PageResult<InvalidTelemetryFrame> pageInvalidTelemetryFrames(
             String taskId,
-            Long deviceSatelliteId,
+            Long interfaceId,
             Integer pageNum,
             Integer pageSize);
     /** 查询任务级处理规则开关；不存在时插入默认配置后返回。 */
@@ -52,7 +52,7 @@ public interface DataProcessingService {
     List<com.example.dataadmin.vo.processing.DeviceSatelliteOptionVO> listDeviceSatellites(String taskId, String type);
     /** 查询指定试验任务的遥测解析规则列表。 */
     List<TelemetryParseRuleConfig> listParseRules(String taskId, Long deviceSatelliteId);
-    /** 分页查询全部参数或指定所属系统及其后代参数。 */
+    /** 分页查询设备全部参数或指定所属系统的直属参数。 */
     PageResult<TelemetryParseRuleConfig> pageParseRules(String taskId, Long deviceSatelliteId,
             Long systemId, Integer pageNum, Integer pageSize);
     /** 同一事务内完整修改当前任务的多条参数解析配置。 */

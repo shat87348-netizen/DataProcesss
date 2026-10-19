@@ -9,6 +9,9 @@ public final class CalibrationRedisKeys {
     /** 待批量写入数据库的校准野值详情队列。 */
     public static final String PENDING_QUEUE = "calibration:persist:pending";
 
+    /** 待批量累加到数据库的校准参数数量队列，不随样本过期清理。 */
+    public static final String PENDING_COUNT_QUEUE = "calibration:persist:count:pending";
+
     /** 工具类不允许实例化。 */
     private CalibrationRedisKeys() {
     }

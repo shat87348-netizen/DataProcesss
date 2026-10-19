@@ -1,8 +1,10 @@
 package com.example.dataadmin.exception;
 
 import com.example.common.response.ApiResponse;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -21,6 +23,26 @@ public class GlobalExceptionHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(
             GlobalExceptionHandler.class);
+
+    /** 请求体格式或字段类型错误按参数错误返回，避免文本框误提交字符串时返回系统异常。 */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnreadableJson(
+            HttpMessageNotReadableException exception) {
+        // 第一步：普通请求使用通用格式提示，不为其他业务接口附加协议配置字段要求。
+        String message = "请求体JSON格式或字段类型不正确";
+        // 第二步：只有解析路径涉及协议动态参数时，明确提示该字段必须提交对象。
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (cause instanceof JsonMappingException) {
+                for (JsonMappingException.Reference reference : ((JsonMappingException) cause).getPath()) {
+                    if ("configParams".equals(reference.getFieldName())) {
+                        message = "请求体JSON格式或字段类型不正确，configParams应为JSON对象";
+                    }
+                }
+            }
+        }
+        // 第三步：统一按参数错误返回四百，不把JSON格式错误报告为系统异常。
+        return ResponseEntity.badRequest().body(ApiResponse.<Void>fail(400, message));
+    }
 
     /** 处理 JSON 请求体参数校验异常。 */
     @ExceptionHandler(MethodArgumentNotValidException.class)

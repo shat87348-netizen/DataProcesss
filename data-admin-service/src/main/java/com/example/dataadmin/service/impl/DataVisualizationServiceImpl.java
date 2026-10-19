@@ -13,6 +13,7 @@ import com.example.dataadmin.dto.processing.TelemetryFilterSelectionRequest;
 import com.example.dataadmin.enums.BusinessEnums;
 import com.example.common.response.PageResult;
 import com.example.dataadmin.vo.visualization.FepFileListItemVO;
+import com.example.dataadmin.storage.MinioFileUrlSigner;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +39,8 @@ public class DataVisualizationServiceImpl implements DataVisualizationService {
     private final FepFileListMapper fileListMapper;
     /** 页面写入与整页配置替换共同锁定所属任务，避免并发写入残留组件。 */
     private final DeviceSatelliteMapper deviceMapper;
+    /** 查询授权通过后才为文件生成临时读取地址。 */
+    private final MinioFileUrlSigner fileUrlSigner;
 
     public DataVisualizationServiceImpl(
             MonitorDashboardWidgetMapper widgetMapper,
@@ -45,13 +48,15 @@ public class DataVisualizationServiceImpl implements DataVisualizationService {
             TelemetryFilterService selectionService,
             ProcessedTelemetryFilterSelectionMapper selectionMapper,
             FepFileListMapper fileListMapper,
-            DeviceSatelliteMapper deviceMapper) {
+            DeviceSatelliteMapper deviceMapper,
+            MinioFileUrlSigner fileUrlSigner) {
         this.widgetMapper = widgetMapper;
         this.itemMapper = itemMapper;
         this.selectionService = selectionService;
         this.selectionMapper = selectionMapper;
         this.fileListMapper = fileListMapper;
         this.deviceMapper = deviceMapper;
+        this.fileUrlSigner = fileUrlSigner;
     }
 
     /** 查询当前用户在指定试验任务下的全部页面组件。 */
@@ -283,6 +288,10 @@ public class DataVisualizationServiceImpl implements DataVisualizationService {
         List<FepFileListItemVO> records = total == 0
                 ? java.util.Collections.emptyList()
                 : fileListMapper.findPage(taskId.trim(), image, (int) offset, pageSize);
+        // 使用保存的对象名称重新签名，兼容历史记录中保存的本机地址且不修改数据库。
+        for (FepFileListItemVO record : records) {
+            record.setFileUrl(fileUrlSigner.createUrl(record.getObjectName()));
+        }
         return new PageResult<>(pageNum, pageSize, total, records);
     }
 

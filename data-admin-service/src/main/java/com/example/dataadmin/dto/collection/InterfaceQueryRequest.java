@@ -13,6 +13,9 @@ public class InterfaceQueryRequest {
     /** 按试验任务过滤。 */
     private String taskId;
 
+    /** 按接口名称包含筛选，空白名称不参与查询。 */
+    private String interfaceName;
+
     /** 接口类型：1 外部接口，2 内部接口。 */
     /** 按接口类型过滤：1 外部接口，2 内部接口。 */
     private Integer interfaceType;
@@ -58,6 +61,16 @@ public class InterfaceQueryRequest {
 
     public void setTaskId(String taskId) {
         this.taskId = taskId;
+    }
+
+    /** 获取接口名称筛选条件。 */
+    public String getInterfaceName() {
+        return interfaceName;
+    }
+
+    /** 清理名称两端空白，避免纯空白内容参与筛选。 */
+    public void setInterfaceName(String interfaceName) {
+        this.interfaceName = interfaceName == null ? null : interfaceName.trim();
     }
 
     public Integer getInterfaceType() {

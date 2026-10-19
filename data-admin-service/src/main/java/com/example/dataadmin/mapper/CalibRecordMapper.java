@@ -1,6 +1,8 @@
 package com.example.dataadmin.mapper;
 
 import com.example.dataadmin.entity.CalibRecord;
+import com.example.dataadmin.vo.calibration.CalibRecordListVO;
+import com.example.dataadmin.vo.calibration.CalibrationOverviewVO;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
@@ -11,10 +13,10 @@ import java.util.List;
  * SQL统一维护在 CalibRecordMapper.xml 中。
  */
 public interface CalibRecordMapper {
-    /** 按试验任务汇总全部有效校准记录的野值数量。 */
-    long sumOutlierCount(@Param("taskId") String taskId);
-    /** 按试验任务ID查询业务数据列表。 */
-    List<CalibRecord> findAllByTaskId(@Param("taskId") String taskId);
+    /** 按试验任务一次汇总全部有效记录的累计校准及野值数量。 */
+    CalibrationOverviewVO findOverview(@Param("taskId") String taskId);
+    /** 按试验任务查询校准记录列表，并返回各通道累计校准数量。 */
+    List<CalibRecordListVO> findAllByTaskId(@Param("taskId") String taskId);
     /** 按任务和主键查询单条业务数据。 */
     CalibRecord findByIdAndTaskId(
             @Param("id") Long id,

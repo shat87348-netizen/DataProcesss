@@ -5,6 +5,7 @@ import SatDataCenter.DataExchange.TmTc.TelemetryMessages.TelemetryMessage;
 import SatDataCenter.DataExchange.TmTc.TelemetryMessages.TelemetryType;
 import com.example.common.tool.IoTDBPathTool;
 import com.example.common.enums.TelemetryFrameStatus;
+import com.example.dataprocess.config.PdxpFramingProperties;
 import com.example.dataprocess.entity.CollectInterfaceRuntimeConfig;
 import com.example.dataprocess.service.IoTDBTelemetryStorageService;
 import com.example.dataprocess.protocol.rpc.PdxpDataPayloadParser;
@@ -26,7 +27,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-/** 按任务、设备卫星主键和遥测类型保存正常结果与异常整帧。 */
+/** 参数按任务与设备卫星身份保存，完整采集帧额外按采集接口隔离。 */
 @Service
 @ConditionalOnProperty(prefix = "iotdb", name = "enabled",
         havingValue = "true", matchIfMissing = true)
@@ -40,6 +41,13 @@ public class IoTDBTelemetryStorageServiceImpl implements IoTDBTelemetryStorageSe
     private static final List<TSDataType> FRAME_DATA_TYPES = Arrays.asList(
             TSDataType.TEXT, TSDataType.TEXT, TSDataType.BLOB, TSDataType.TEXT);
     private final SessionPool sessionPool;
+    /** 异常帧回退复用接收端同一份长度配置，离线构造沿用默认值。 */
+    private PdxpFramingProperties framingProperties = new PdxpFramingProperties();
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setFramingProperties(PdxpFramingProperties framingProperties) {
+        this.framingProperties = framingProperties;
+    }
 
     public IoTDBTelemetryStorageServiceImpl(SessionPool sessionPool) {
         this.sessionPool = sessionPool;
@@ -85,15 +93,17 @@ public class IoTDBTelemetryStorageServiceImpl implements IoTDBTelemetryStorageSe
         }
         String channelName = deviceName.substring(0, separator).trim();
         // 第三步：保持数据域可拆分的回退条件，原码则保留完整采集帧及各类头。
-        PdxpDataPayloadParser.parse(packet.getData());
+        PdxpDataPayloadParser.parse(packet.getData(), framingProperties.getCustomDataLength(),
+                framingProperties.getTelemetryHeaderLength());
         byte[] raw = packet.getRawPacket();
         long timestamp = packet.getSendDate().atStartOfDay()
                 .plus(packet.getTimeSinceMidnight())
                 .toInstant(ZoneOffset.ofHours(8)).toEpochMilli();
-        // 第四步：单独写入四个整帧测点，不生成参数或遥测消息。
-        sessionPool.insertRecord(parameterRoot + "._frame", timestamp,
+        // 第四步：异常整帧按采集接口保存，继续只写四个测点，不生成参数或遥测消息。
+        sessionPool.insertRecord(frameDevicePath(config, parameterRoot), timestamp,
                 FRAME_MEASUREMENTS, FRAME_DATA_TYPES,
-                frameValues(config, channelName, raw, TelemetryFrameStatus.ABNORMAL));
+                frameValues(config.getDeviceSatelliteName(), channelName,
+                        raw, TelemetryFrameStatus.ABNORMAL));
     }
 
     /** 旧独立写帧入口缺少设备主键，由统一批量入口处理。 */
@@ -107,14 +117,14 @@ public class IoTDBTelemetryStorageServiceImpl implements IoTDBTelemetryStorageSe
     public void saveProcessedParameters(CollectInterfaceRuntimeConfig config,
             TelemetryMessage message, byte[] rawFrame) throws Exception {
         if (message == null || !message.hasProtoHead()) {
-            throw new IllegalArgumentException("IoTDB写入缺少任务、设备卫星主键或遥测消息");
+            throw new IllegalArgumentException("IoTDB写入缺少任务或遥测消息");
         }
         // 完整帧必须由采集处理链路传入，不使用Proto去头数据域代替。
         if (rawFrame == null || rawFrame.length == 0) {
             throw new IllegalArgumentException("IoTDB整帧写入缺少完整采集原码");
         }
-        // 正常结果与本地异常整帧共用设备路径，禁止使用未知任务或设备占位节点。
-        String parameterRoot = parameterRoot(config, message.getTmType());
+        // 本地结果按设备主键保存，RPC结果按返回的卫星和通道代号保存。
+        String parameterRoot = processedParameterRoot(config, message);
         String taskId = message.getProtoHead().getTaskId();
         if (!config.getTaskId().equals(taskId)) {
             throw new IllegalArgumentException("遥测消息任务编号与采集接口不一致");
@@ -127,8 +137,8 @@ public class IoTDBTelemetryStorageServiceImpl implements IoTDBTelemetryStorageSe
         List<List<TSDataType>> dataTypesList = new ArrayList<>(recordCount);
         List<List<Object>> valuesList = new ArrayList<>(recordCount);
 
-        // 整帧保存设备名称、Proto通道名称、完整采集原码和中文检查结果。
-        deviceIds.add(parameterRoot + "._frame");
+        // 整帧路径增加接口身份，测点仍为设备名称、通道名称、完整原码和检查结果。
+        deviceIds.add(frameDevicePath(config, parameterRoot));
         timestamps.add(timestamp);
         measurementsList.add(FRAME_MEASUREMENTS);
         dataTypesList.add(FRAME_DATA_TYPES);
@@ -136,7 +146,14 @@ public class IoTDBTelemetryStorageServiceImpl implements IoTDBTelemetryStorageSe
         TelemetryFrameStatus frameStatus = Integer.valueOf(1).equals(config.getRpcEnabled())
                 && !message.getFrameCheckStatus()
                 ? TelemetryFrameStatus.ABNORMAL : TelemetryFrameStatus.NORMAL;
-        valuesList.add(frameValues(config, message.getChannelName(), rawFrame, frameStatus));
+        // RPC显示名称来自最终消息，名称缺失时显示返回编码，不读取本地导入设备。
+        String deviceName = Integer.valueOf(1).equals(config.getRpcEnabled())
+                ? displayName(message.getSatName(), message.getSatCode())
+                : config.getDeviceSatelliteName();
+        String channelName = Integer.valueOf(1).equals(config.getRpcEnabled())
+                ? displayName(message.getChannelName(), message.getChannelCode())
+                : message.getChannelName();
+        valuesList.add(frameValues(deviceName, channelName, rawFrame, frameStatus));
 
         // 参数数值严格取Proto的value，不再使用valueText或派生状态索引。
         for (Map.Entry<String, Telemetry> entry : message.getTelemetriesMap().entrySet()) {
@@ -160,25 +177,71 @@ public class IoTDBTelemetryStorageServiceImpl implements IoTDBTelemetryStorageSe
                 measurementsList, dataTypesList, valuesList);
     }
 
-    /** 根据有效接口身份构造统一的遥测类型根路径。 */
-    private String parameterRoot(CollectInterfaceRuntimeConfig config, TelemetryType type) {
-        if (config == null || config.getDeviceSatelliteId() == null
-                || config.getDeviceSatelliteId() <= 0 || config.getTaskId() == null
-                || config.getTaskId().trim().isEmpty()) {
-            throw new IllegalArgumentException("IoTDB写入缺少有效任务编号或设备卫星主键");
+    /** 按处理方式选择独立存储身份，RPC不依赖协议中的本地设备主键。 */
+    private String processedParameterRoot(CollectInterfaceRuntimeConfig config,
+            TelemetryMessage message) {
+        // 第一步：复用任务校验，阻止没有任务身份的结果入库。
+        String taskRoot = taskRoot(config);
+        // 第二步：RPC按返回编码生成同层级身份，实时帧任务查询可继续使用原有路径。
+        if (Integer.valueOf(1).equals(config.getRpcEnabled())) {
+            return taskRoot + "."
+                    + IoTDBPathTool.rpcDeviceNode(message.getSatCode(), message.getChannelCode())
+                    + ".tms." + telemetryTypeNode(message.getTmType());
         }
-        return ROOT_PATH + "."
-                + IoTDBPathTool.prefixedPathNode("task_", config.getTaskId(), "unknown_task")
+        // 第三步：本地结果沿用设备主键路径，与本地异常整帧保持一致。
+        return parameterRoot(config, message.getTmType());
+    }
+
+    /** 根据本地设备主键构造遥测类型根路径。 */
+    private String parameterRoot(CollectInterfaceRuntimeConfig config, TelemetryType type) {
+        // 第一步：校验本地任务及设备身份，不允许构造占位设备节点。
+        String taskRoot = taskRoot(config);
+        if (config.getDeviceSatelliteId() == null || config.getDeviceSatelliteId() <= 0) {
+            throw new IllegalArgumentException("本地遥测入库缺少有效设备卫星主键");
+        }
+        // 第二步：保持原有设备节点和遥测类型节点，历史本地数据无需迁移。
+        return taskRoot
                 + "." + IoTDBPathTool.prefixedPathNode("device_",
                         String.valueOf(config.getDeviceSatelliteId()), "unknown_device")
                 + ".tms." + telemetryTypeNode(type);
     }
 
+    /** 为完整采集帧增加接口层级，参数原有路径继续复用。 */
+    private String frameDevicePath(CollectInterfaceRuntimeConfig config, String parameterRoot) {
+        // 第一步：必须有真实接口主键，避免多个来源写到同一个占位路径。
+        if (config.getInterfaceId() == null || config.getInterfaceId() <= 0) {
+            throw new IllegalArgumentException("IoTDB整帧入库缺少有效采集接口主键");
+        }
+        // 第二步：在任务与设备卫星身份之间插入接口节点，保留其余路径和测点结构。
+        String taskPath = taskRoot(config);
+        return taskPath + "."
+                + IoTDBPathTool.prefixedPathNode("interface_",
+                        String.valueOf(config.getInterfaceId()), "unknown_interface")
+                + parameterRoot.substring(taskPath.length()) + "._frame";
+    }
+
+    /** 为两种处理方式提供相同的有效任务根路径。 */
+    private String taskRoot(CollectInterfaceRuntimeConfig config) {
+        // 任务编号来自采集接口，不允许使用未知任务占位路径。
+        if (config == null || config.getTaskId() == null || config.getTaskId().trim().isEmpty()) {
+            throw new IllegalArgumentException("IoTDB写入缺少有效任务编号");
+        }
+        return ROOT_PATH + "."
+                + IoTDBPathTool.prefixedPathNode("task_", config.getTaskId(), "unknown_task");
+    }
+
     /** 正常帧和异常帧复用相同字段来源及中文检查结果。 */
-    private List<Object> frameValues(CollectInterfaceRuntimeConfig config,
+    private List<Object> frameValues(String deviceName,
             String channelName, byte[] raw, TelemetryFrameStatus status) {
-        return Arrays.<Object>asList(text(config.getDeviceSatelliteName()), text(channelName),
+        // 显示名称由调用方按处理方式确定，测点名称保持既有查询约定。
+        return Arrays.<Object>asList(text(deviceName), text(channelName),
                 new Binary(raw), text(status.getLabel()));
+    }
+
+    /** RPC显示名称缺失时使用返回编码，避免查询页面出现空白身份。 */
+    private String displayName(String name, String code) {
+        // 返回消息中的名称优先，编码仅用于名称缺失时的显示回退。
+        return name == null || name.trim().isEmpty() ? code : name;
     }
 
     /** 将遥测类型编码映射到稳定的路径节点。 */

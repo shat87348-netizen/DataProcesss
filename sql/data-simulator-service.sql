@@ -1,20 +1,20 @@
 -- 独立模拟源模块建表脚本，适用于金仓的PostgreSQL兼容模式。
 -- 新库初始化及已有模拟源表升级统一执行本文件，不修改旧模块数据表。
+-- 字段取值与长度规则由后端校验，本文件仅保留非空、主键、外键和必要索引。
 CREATE TABLE IF NOT EXISTS simulator_source_config (
     id BIGSERIAL PRIMARY KEY,
     source_name VARCHAR(100) NOT NULL,
-    transfer_protocol SMALLINT NOT NULL CHECK (transfer_protocol IN (2,3)),
+    transfer_protocol SMALLINT NOT NULL,
     transfer_type SMALLINT NOT NULL,
     file_path VARCHAR(1000) NOT NULL,
     target_host VARCHAR(100) NOT NULL,
-    target_port INT NOT NULL CHECK (target_port BETWEEN 1 AND 65535),
-    send_interval_millis BIGINT NOT NULL CHECK (send_interval_millis >= 0),
-    loop_enabled SMALLINT NOT NULL CHECK (loop_enabled IN (0,1)),
+    target_port INT NOT NULL,
+    send_interval_millis BIGINT NOT NULL,
+    loop_enabled SMALLINT NOT NULL,
     remark VARCHAR(500),
     is_deleted SMALLINT NOT NULL DEFAULT 0,
     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CHECK ((transfer_protocol = 2 AND transfer_type = 1) OR (transfer_protocol = 3 AND transfer_type = 2))
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 COMMENT ON TABLE simulator_source_config IS '模拟源配置';
 COMMENT ON COLUMN simulator_source_config.id IS '主键';
@@ -45,14 +45,7 @@ CREATE TABLE IF NOT EXISTS simulator_pdxp_config (
     did VARCHAR(8) NOT NULL,
     bid VARCHAR(8) NOT NULL,
     initial_no VARCHAR(8) NOT NULL,
-    flag VARCHAR(2) NOT NULL,
-    CHECK (input_frame_length BETWEEN 1 AND 65475),
-    CHECK (telemetry_header_length BETWEEN 0 AND input_frame_length),
-    CHECK (transport_header_length BETWEEN 0 AND 65475),
-    CHECK (custom_data_length BETWEEN 0 AND 65475),
-    CHECK (input_frame_length + transport_header_length + custom_data_length + 32 <= 65507),
-    CHECK (LENGTH(transport_header) = transport_header_length * 2),
-    CHECK (LENGTH(custom_data) = custom_data_length * 2)
+    flag VARCHAR(2) NOT NULL
 );
 -- 已有初版表先补充字段，再执行字段注释；新库也可重复执行。
 ALTER TABLE simulator_pdxp_config ADD COLUMN IF NOT EXISTS input_frame_length INT NOT NULL DEFAULT 512;
@@ -80,7 +73,7 @@ COMMENT ON COLUMN simulator_pdxp_config.flag IS '十六进制协议字段';
 CREATE TABLE IF NOT EXISTS simulator_run_record (
     id BIGSERIAL PRIMARY KEY,
     source_id BIGINT NOT NULL REFERENCES simulator_source_config(id),
-    run_status SMALLINT NOT NULL CHECK (run_status BETWEEN 1 AND 6),
+    run_status SMALLINT NOT NULL,
     config_snapshot JSONB NOT NULL,
     start_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     end_time TIMESTAMP,
@@ -106,6 +99,48 @@ COMMENT ON COLUMN simulator_run_record.last_send_time IS '最近发送时间';
 COMMENT ON COLUMN simulator_run_record.error_message IS '异常原因';
 COMMENT ON COLUMN simulator_run_record.create_time IS '创建时间';
 COMMENT ON COLUMN simulator_run_record.update_time IS '更新时间';
+
+-- 业务取值、协议组合和长度校验统一由后端执行；此段可重复执行。
+-- 只清理当前连接默认模式下这三张模拟源表的CHECK，保留主键、外键和唯一索引。
+BEGIN;
+
+-- 第一步：通过系统目录识别旧CHECK，兼容历史数据库的不同约束命名。
+DO $$
+DECLARE
+    check_record RECORD;
+BEGIN
+    FOR check_record IN
+        SELECT namespace_config.nspname AS schema_name,
+               table_config.relname AS table_name,
+               constraint_config.conname AS constraint_name
+        FROM pg_constraint constraint_config
+        JOIN pg_class table_config
+          ON table_config.oid = constraint_config.conrelid
+        JOIN pg_namespace namespace_config
+          ON namespace_config.oid = table_config.relnamespace
+        WHERE constraint_config.contype = 'c'
+          AND constraint_config.conrelid IN (
+              to_regclass('simulator_source_config'),
+              to_regclass('simulator_pdxp_config'),
+              to_regclass('simulator_run_record')
+          )
+    LOOP
+        EXECUTE format('ALTER TABLE %I.%I DROP CONSTRAINT %I',
+                       check_record.schema_name,
+                       check_record.table_name,
+                       check_record.constraint_name);
+    END LOOP;
+END;
+$$;
+
+-- 第二步：将历史FEP配置编码从4迁移为3，不修改运行历史中的原始快照。
+UPDATE simulator_source_config
+SET transfer_protocol = 3,
+    update_time = CURRENT_TIMESTAMP
+WHERE transfer_protocol = 4;
+
+-- 第三步：所有约束清理和数据迁移成功后统一提交，失败时整体回滚。
+COMMIT;
 
 -- 有效名称唯一，删除后可重新使用名称。
 CREATE UNIQUE INDEX IF NOT EXISTS uk_simulator_source_name ON simulator_source_config(source_name) WHERE is_deleted = 0;

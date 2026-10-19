@@ -4,21 +4,20 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.example.dataadmin.mapper.CollectInterfaceConfigMapper">
 
-    <!-- 查询最近进入运行状态的试验任务下应该运行的完整采集接口主键列表。 -->
+    <!-- 查询所有运行中试验任务下应该运行的完整采集接口主键列表。 -->
     <select id="findAllEnabledIds" resultType="long">
         select id
         from collect_interface_config
         where enabled = 1
           and is_deleted = 0
-          and task_id = (
-              select current_task.task_id
-              from (
-                  select task_id, task_status
-                  from experiment_task
-                  order by event_time desc, update_time desc
-                  limit 1
-              ) current_task
-              where current_task.task_status = 1
+          <!-- 套接字任务只包含UDP和TCP，HTTP由统一Web入口接收。 -->
+          and transfer_type in (1, 2)
+          <!-- 只校验接口所属任务状态，避免其他任务的新事件排除当前接口。 -->
+          and exists (
+              select 1
+              from experiment_task task_config
+              where task_config.task_id = collect_interface_config.task_id
+                and task_config.task_status = 1
           )
         order by id
     </select>
@@ -33,6 +32,13 @@
     <resultMap id="collectInterfaceOptionMap"
                type="com.example.dataadmin.vo.processing.CollectInterfaceOptionVO">
         <id column="id" property="interfaceId"/>
+        <result column="interface_name" property="interfaceName"/>
+    </resultMap>
+
+    <!-- 删除协议前只读取绑定接口的主键与名称，提示文本由业务层生成。 -->
+    <resultMap id="protocolBindingInterfaceMap"
+               type="com.example.dataadmin.entity.CollectInterfaceConfig">
+        <id column="id" property="id"/>
         <result column="interface_name" property="interfaceName"/>
     </resultMap>
 
@@ -62,6 +68,7 @@
         host,
         port,
         multicast_ip,
+        receive_path,
         enabled,
         rpc_enabled,
         data_packet_count,
@@ -75,6 +82,11 @@
     <sql id="queryConditions">
         <if test="taskId != null and taskId != ''">
             and task_id = #{taskId}
+        </if>
+        <if test="interfaceName != null and interfaceName != ''">
+            <!-- 分页和总数共用名称条件，在MyBatis中生成包含匹配参数。 -->
+            <bind name="interfaceNamePattern" value="'%' + interfaceName + '%'"/>
+            and interface_name like #{interfaceNamePattern}
         </if>
         <if test="interfaceType != null">
             and interface_type = #{interfaceType}
@@ -115,34 +127,6 @@
         <include refid="queryConditions"/>
         order by id desc
         limit #{pageSize} offset #{offset}
-    </select>
-
-    <!-- 分页完成后批量汇总当前页接口；保留已归档窗口，累计量不随七天清理减少。 -->
-    <select id="findCollectionCounts"
-            resultType="com.example.dataadmin.entity.CollectInterfaceConfig">
-        select
-            task_id,
-            interface_id as id,
-            coalesce(sum(collection_count), 0) as data_packet_count
-        from collect_interface_statistics
-        where 1 = 1
-        <if test="taskId != null and taskId != ''">
-            and task_id = #{taskId}
-        </if>
-        <!-- 空接口列表不扫描统计表，避免越页或全量汇总。 -->
-        <choose>
-            <when test="interfaceIds != null and interfaceIds.size() > 0">
-                and interface_id in
-                <foreach collection="interfaceIds" item="interfaceId"
-                         open="(" separator="," close=")">
-                    #{interfaceId}
-                </foreach>
-            </when>
-            <otherwise>
-                and 1 = 0
-            </otherwise>
-        </choose>
-        group by task_id, interface_id
     </select>
 
     <!-- 统计符合筛选条件的采集接口数量。 -->
@@ -194,17 +178,52 @@
     </select>
 
     <!-- 删除协议前查询全部有效绑定，已禁用但未删除的接口同样阻止删除。 -->
-    <select id="findActiveNamesByProtocolConfigId" resultType="string">
-        <!-- 使用函数拼接未命名接口提示，避免数据库把双竖线当作逻辑或。 -->
-        select coalesce(nullif(trim(interface_name), ''),
-                        concat('未命名采集接口（编号：', cast(id as varchar), '）'))
+    <select id="findActiveBindingsByProtocolConfigId" resultMap="protocolBindingInterfaceMap">
+        select id, interface_name
         from collect_interface_config
         where protocol_config_id = #{protocolConfigId}
           and is_deleted = 0
         order by id
     </select>
 
-    <!-- 校验已启用接口的传输方式、监听地址、端口和组播地址是否重复。 -->
+    <!-- 查询未删除HTTP绑定，明确返回保护协议类型、任务和启用状态所需字段。 -->
+    <select id="findHttpBindingsByProtocolConfigId"
+            resultType="com.example.dataadmin.entity.CollectInterfaceConfig">
+        select id, task_id, interface_name, enabled
+        from collect_interface_config
+        where transfer_type = 3
+          and is_deleted = 0
+        <choose>
+            <when test="protocolConfigId != null">
+                and protocol_config_id = #{protocolConfigId}
+            </when>
+            <otherwise>
+                and 1 = 0
+            </otherwise>
+        </choose>
+        order by id
+    </select>
+
+    <!-- HTTP路径在整个接收服务内唯一，不按任务、域名或启用状态分割。 -->
+    <select id="countHttpReceivePathConflicts" resultType="long">
+        select count(1)
+        from collect_interface_config
+        where transfer_type = 3
+          and is_deleted = 0
+        <choose>
+            <when test="receivePath != null and receivePath != ''">
+                and receive_path = #{receivePath}
+            </when>
+            <otherwise>
+                and 1 = 0
+            </otherwise>
+        </choose>
+        <if test="excludeId != null">
+            and id != #{excludeId}
+        </if>
+    </select>
+
+    <!-- 校验套接字接口的已启用监听配置，HTTP复用独立的路径检查。 -->
     <select id="countEnabledEndpointConflicts" resultType="long">
         select count(1)
         from collect_interface_config
@@ -244,6 +263,7 @@
             host,
             port,
             multicast_ip,
+            receive_path,
             status,
             enabled,
             rpc_enabled,
@@ -264,6 +284,7 @@
             #{host},
             #{port},
             #{multicastIp},
+            #{receivePath},
             #{status},
             #{enabled},
             #{rpcEnabled},
@@ -276,8 +297,7 @@
     <!-- 更新采集接口业务字段。 -->
     <update id="update">
         update collect_interface_config
-        set task_id = #{taskId},
-            interface_name = #{interfaceName},
+        set interface_name = #{interfaceName},
             interface_type = #{interfaceType},
             send_from = #{sendFrom},
             message_content = #{messageContent},
@@ -287,6 +307,7 @@
             host = #{host},
             port = #{port},
             multicast_ip = #{multicastIp},
+            receive_path = #{receivePath},
             status = #{status},
             enabled = #{enabled},
             rpc_enabled = #{rpcEnabled},
@@ -294,6 +315,15 @@
             update_time = current_timestamp
         where id = #{id}
           and is_deleted = 0
+        <!-- 更新条件同时核对原任务归属，避免并发请求改变接口关联任务。 -->
+        <choose>
+            <when test="taskId != null">
+                and task_id = #{taskId}
+            </when>
+            <otherwise>
+                and task_id is null
+            </otherwise>
+        </choose>
     </update>
 
     <!-- 逻辑删除采集接口。 -->

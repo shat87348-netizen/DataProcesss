@@ -1,7 +1,7 @@
 package com.example.simulator.service.impl;
 
 import com.example.simulator.enums.ProtocolProfile;
-import com.example.simulator.api.SaveRequest;
+import com.example.simulator.controller.SaveRequest;
 import com.example.simulator.service.SourceService;
 import com.example.simulator.model.*;
 import com.example.simulator.mapper.SimulatorMapper;

@@ -11,17 +11,18 @@ spring:
     timeout: 3000ms
 # 当前UDP遥测处理主流程的RocketMQ连接和生产者配置。
 rocketmq:
-  name-server: 127.0.0.1:9876
+  name-server: "10.126.100.201:9876;10.126.100.201:10876;10.126.100.201:11876;10.126.100.201:12876;10.126.100.201:13876;10.126.100.201:14876"
   producer:
     group: telemetry
     send-message-timeout: 5000
-    access-key:
-    secret-key:
+    access-key: SJCLMQ
+    secret-key: SJCLMQ123
 
 # 文件对象存储连接配置。
 minio:
   endpoint: http://127.0.0.1:9002
-  public-url: http://127.0.0.1:9002
+  # 浏览器可达的API根地址；与管理服务签名地址保持一致，部署时替换为实际IP或域名。
+  public-url: http://10.126.100.107:9002
   access-key: minioadmin
   secret-key: minioadmin123
   bucket-name: fep-files
@@ -36,11 +37,15 @@ system-monitor:
   # 处理服务心跳写入间隔，单位毫秒；多个实例共用心跳键。
   process-heartbeat-interval-millis: 5000
   # 心跳键过期时间，单位毫秒，必须大于写入间隔。
+  # 处理服务心跳键的过期时间，单位毫秒，必须大于心跳写入间隔。
   process-heartbeat-expiry-millis: 30000
-  snapshot-retention-days: 7
+  # CPU使用率告警阈值，单位百分比。
   cpu-warning-percent: 85
+  # 内存使用率告警阈值，单位百分比。
   memory-warning-percent: 90
+  # 磁盘使用率告警阈值，单位百分比。
   disk-warning-percent: 85
+  # RocketMQ消息积压数量告警阈值，单位条。
   queue-warning-depth: 1000
 
 # IoTDB 客户端版本应与服务端版本保持一致；未配置时默认不写入。
@@ -55,8 +60,16 @@ iotdb:
 
 # 数据采集接口和数据处理公共配置。
 data-processing:
+  # 系统级PDXP拆帧配置，所有PDXP采集接口共用；修改后重启处理服务生效。
+  pdxp:
+    # 报文最前面的传输头字节数，0表示没有；未配置默认2。
+    transport-header-length: 2
+    # PDXP数据域开头的自定义数据字节数，0表示没有；未配置默认5。
+    custom-data-length: 5
+    # PDXP数据域末尾的遥测帧头字节数，0表示没有；未配置默认4。
+    telemetry-header-length: 4
   # UDP采集线程池固定线程数，超过该数量的接口会明确启动失败。
-  collect-thread-count: 32
+  collect-thread-count: 64
   # 遥测数据处理线程池固定线程数。
   process-thread-count: 64
   # 数据处理线程池等待队列容量。
@@ -79,11 +92,11 @@ data-processing:
   statistics-flush-millis: 5000
   # 当前主流程只向该RocketMQ主题发布最终遥测结果。
   mq:
-    result-topic: topic_pdxp_test
+    result-topic: topic_yc_out_sjcl
     result-tag:
     # 文件接收完成后发送文件地址和基础信息的主题。
-    file-topic: topic_fep_file
-    file-tag: fep-file
+    file-topic: topic_file_out
+    file-tag:
   # 文件交换接收使用的系统级配置，不读取协议配置表。
   fep:
     # 相对路径以数据处理服务启动目录为基准，每个接口会创建独立子目录。
@@ -107,11 +120,11 @@ data-processing:
     # 单帧RPC调用的最大等待时间。
     timeout-millis: 5000
 
-# 野值检测的实时样本缓存和野值详情批量落库配置。
+# 野值检测的实时样本缓存、累计校准数量及野值详情批量落库配置。
 calibration:
-  # 每五秒把缓存队列中的野值详情批量写入数据库。
+  # 每轮落库结束后等待五秒，再把校准数量增量及野值详情批量写入数据库。
   persistence-interval-millis: 5000
-  # 单次落库最多处理的野值详情数量。
+  # 每个队列单次最多处理的条数；校准数量先按每条消息的通道合并，野值详情按条计数。
   persistence-batch-size: 500
   # 校准算法有效样本缓存保留天数。
   effective-cache-days: 7
@@ -121,3 +134,9 @@ baseline:
     api-base-url: http://10.126.100.249:16001/prod-api
     connect-timeout-millis: 5000
     read-timeout-millis: 10000
+
+# IoTDB业务数据过期删除配置；不填或留空不删除，只接受正整数天数。
+data-retention:
+  # 遥测参数、正常帧、异常帧和遥测曲线共用保留天数，以帧时间为准。
+  # 每小时第15分钟删除早于截止时间的数据；变更后重启处理服务生效。
+  telemetry-days: 7

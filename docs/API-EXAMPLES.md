@@ -4,6 +4,8 @@
 
 ## 阅读说明
 
+`GET /visualization/widgets/{widgetId}/files` 返回的 `fileUrl` 是临时签名读取地址，默认3600秒有效，完整参数必须保留，过期后重新查询列表。前端调用及部署配置见[图片与文件访问地址](前端对接-图片与文件访问地址.md)。MQ文件消息中的持久地址沿用原有格式。
+
 可视化配置导入导出新增三个接口：`GET /visualization/config/export`、`POST /visualization/config/import/preview`和`POST /visualization/config/import`。导出成功返回JSON附件本身，检查和导入按`multipart/form-data`上传`file`并通过查询参数提供`taskId`，成功结果使用统一响应。完整配置文件、检查结果及前端调用流程见[可视化配置导入导出对接](前端对接-可视化配置导入导出.md)。
 
 除登录接口外，请求都需携带：
@@ -729,7 +731,7 @@ roleIds=20,21
 
 入参：
 
-查询参数见 URL
+查询参数见 URL。可传 `interfaceName=遥测` 按接口名称包含筛选；首尾空格自动去除，空白时不限名称。分页列表和总数使用相同条件。
 
 出参：
 
@@ -752,7 +754,7 @@ roleIds=20,21
         "transferType": 1, // 传输方式：1UDP 2TCP 3HTTP。枚举：1 UDP，2 TCP，3 HTTP
         "transferProtocol": 2, // 传输协议：1 JSON、2 PDXP、3 FEP
         "transferProtocolName": "PDXP", // 传输协议名称
-        "protocolConfigId": 21, // 本地处理和RPC处理都必须关联协议配置
+        "protocolConfigId": 21, // 非HTTP、非FEP的本地处理和RPC处理都必须关联协议配置
         "host": "192.168.1.10", // 数据处理服务本机监听网卡IP地址
         "port": 9001, // 数据处理服务本机监听端口
         "multicastIp": "239.1.1.1", // UDP组播地址；为空时按单播接收
@@ -761,7 +763,7 @@ roleIds=20,21
         "enabled": 1, // 是否启用通道：0否 1是。枚举：0 禁用，1 启用
         "rpcEnabled": 1, // 是否启用RPC处理：0否 1是
         "rpcEnabledName": "是", // 是否启用RPC处理中文名称
-        "dataPacketCount": 25600, // 累计接收的数据包数量
+        "dataPacketCount": 25600, // 仍保留的统计记录累计接收数据包数量
         "remark": "主链路" // 备注信息
       }
     ]
@@ -790,7 +792,7 @@ roleIds=20,21
     "transferType": 1, // 传输方式：1UDP 2TCP 3HTTP。枚举：1 UDP，2 TCP，3 HTTP
     "transferProtocol": 2, // 传输协议：1 JSON、2 PDXP、3 FEP
     "transferProtocolName": "PDXP", // 传输协议名称
-    "protocolConfigId": 21, // 本地处理和RPC处理都关联的协议配置
+    "protocolConfigId": 21, // HTTP选JSON；其他非FEP协议的两种方式都关联的协议配置
     "protocolConfigName": "遥测RPC协议配置", // 详情展示名称，未关联或协议已删除时为空
     "host": "192.168.1.10", // 数据处理服务本机监听网卡IP地址
     "port": 9001, // 数据处理服务本机监听端口
@@ -800,7 +802,7 @@ roleIds=20,21
     "enabled": 1, // 是否启用通道：0否 1是。枚举：0 禁用，1 启用
     "rpcEnabled": 1, // 是否启用RPC处理：0否 1是
     "rpcEnabledName": "是", // 是否启用RPC处理中文名称
-    "dataPacketCount": 25600, // 累计接收的数据包数量
+    "dataPacketCount": 25600, // 仍保留的统计记录累计接收数据包数量
     "remark": "主链路" // 备注信息
   }
 }
@@ -819,7 +821,7 @@ roleIds=20,21
   "messageContent": "实时遥测", // 采集消息内容或格式说明
   "transferType": 1, // 传输方式：1UDP 2TCP 3HTTP。枚举：1 UDP，2 TCP，3 HTTP
   "transferProtocol": 2, // 传输协议：1 JSON、2 PDXP、3 FEP
-  "protocolConfigId": 21, // 本地处理和RPC处理都必须关联协议配置
+  "protocolConfigId": 21, // 非HTTP、非FEP的本地处理和RPC处理都必须关联协议配置
   "host": "192.168.1.10", // 数据处理服务本机监听网卡IP地址
   "port": 9001, // 数据处理服务本机监听端口
   "multicastIp": "239.1.1.1", // UDP组播地址；为空时按单播接收
@@ -853,7 +855,7 @@ roleIds=20,21
   "messageContent": "实时遥测", // 采集消息内容或格式说明
   "transferType": 1, // 传输方式：1UDP 2TCP 3HTTP。枚举：1 UDP，2 TCP，3 HTTP
   "transferProtocol": 2, // 传输协议：1 JSON、2 PDXP、3 FEP
-  "protocolConfigId": 21, // 本地处理和RPC处理都必须关联协议配置
+  "protocolConfigId": 21, // 非HTTP、非FEP的本地处理和RPC处理都必须关联协议配置
   "host": "192.168.1.11", // 数据处理服务本机监听网卡IP地址
   "port": 9001, // 数据处理服务本机监听端口
   "multicastIp": "239.1.1.1", // UDP组播地址；为空时按单播接收
@@ -872,7 +874,7 @@ roleIds=20,21
 }
 ```
 
-本地处理和RPC处理都必须选择协议配置，区别仅由 `rpcEnabled` 决定。
+处理（`rpcEnabled=0`）只能选择PDXP配置（`protocolType=2`）；转发（`rpcEnabled=1`）只能选择RPC配置（`protocolType=4`）。HTTP固定JSON并选择当前任务下已启用JSON配置；非HTTP、非FEP的两种方式必须选择对应协议配置，类型不匹配时后端拒绝保存。
 UDP接口填写 `multicastIp` 时通过 `host` 指定的本机网卡加入该组播地址；`multicastIp` 为空时使用 `host` 和 `port` 接收单播数据。TCP接口不允许填写 `multicastIp`。
 
 ```json
@@ -890,7 +892,41 @@ UDP接口填写 `multicastIp` 时通过 `host` 指定的本机网卡加入该组
 }
 ```
 
+FEP（`transferProtocol=3`）创建和修改时无需提交处理方式、协议配置；后端固定保存 `rpcEnabled=0`、`protocolConfigId=null`，提交旧值或切换到FEP时也会清理。创建示例：
+
+```json
+{
+  "taskId": "TASK-20260908-001",
+  "interfaceName": "文件TCP采集接口",
+  "interfaceType": 1,
+  "transferType": 2,
+  "transferProtocol": 3,
+  "host": "0.0.0.0",
+  "port": 19003,
+  "enabled": 1
+}
+```
+
 修改时在上述请求中增加 `id`。
+HTTP创建与修改的地址、路径及JSON配置规则见[完整前端对接文档](前端对接-HTTP采集与协议配置变更.md)。HTTP创建示例：
+
+```json
+{
+  "taskId": "TASK-20260908-001",
+  "interfaceName": "HTTP遥测采集接口",
+  "interfaceType": 1,
+  "transferType": 3,
+  "transferProtocol": 1,
+  "protocolConfigId": 23,
+  "host": "192.168.1.10",
+  "port": 8083,
+  "receivePath": "/collection/receive/telemetry",
+  "enabled": 1
+}
+```
+
+修改时增加顶层 `id`，仍提交完整配置。列表、详情的 `receiveUrl` 是只读计算字段，统一HTTP入口现已支持接收JSON并返回成功，当前不处理业务、不入库、不统计。
+
 ### `POST /collection/interfaces/delete`
 
 入参：
@@ -932,32 +968,44 @@ UDP接口填写 `multicastIp` 时通过 `host` 指定的本机网卡加入该组
 
 ### `GET /collection/protocols`
 
-入参：
-
-查询：taskId=TASK-20260908-001
+查询参数：`taskId=TASK-20260908-001&protocolType=4&configName=遥测&pageNum=1&pageSize=10`。名称按包含关系模糊匹配，三个筛选条件可组合使用。分页默认第1页、每页10条，每页最大100条。
 
 出参：
 
 ```jsonc
 {
-  "code": 200, // 业务状态码，200 表示操作成功
-  "message": "操作成功", // 业务处理结果提示信息
-  "data": [ // 接口返回的业务数据
-    {
-      "id": 21, // 业务数据主键 ID
-      "configName": "遥测 JSON 协议", // 协议配置名称
-      "protocolType": 1, // 协议类型：1JSON 2PDXP 3Protobuf 4RPC。枚举：1 JSON，2 PDXP，3 Protobuf，4 RPC
-      "dataSourceType": 1, // 数据源类型：1 遥测，2 遥感，3 设备，4 环境。枚举：1 遥测，2 遥感，3 设备，4 环境
-      "configDesc": "标准遥测格式", // 协议配置说明
-      "configParams": { // 协议解析使用的动态配置参数
-        "encoding": "UTF-8" // 协议字符编码
-      },
-      "parserClass": "com.example.JsonParser", // 协议解析器实现类的全限定名
-      "enabled": 1 // 是否启用通道：0否 1是。枚举：0 禁用，1 启用
-    }
-  ]
+  "code": 200, // 业务状态码
+  "message": "操作成功", // 响应提示
+  "data": {
+    "pageNum": 1, // 当前页码
+    "pageSize": 10, // 每页记录数
+    "total": 1, // 符合筛选条件的总数
+    "records": [ // 当前页配置
+      {
+        "id": 22, // 协议配置主键
+        "taskId": "TASK-20260908-001", // 所属任务
+        "configName": "遥测RPC处理配置", // 配置名称
+        "protocolType": 4, // 协议类型编码，用于筛选和提交
+        "protocolTypeName": "RPC", // 协议类型展示名称
+        "configDesc": "卫星遥测RPC请求参数", // 配置说明
+        "configParams": {
+          "fields": [
+            { "field": "sat_code", "fieldName": "卫星代号", "value": "SAT-001" },
+            { "field": "channel", "fieldName": "通道代号", "value": "CH-01" },
+            { "field": "data_source", "fieldName": "数据源", "value": "telemetry" },
+            { "field": "station_code", "fieldName": "站点代号", "value": "ST-01" }
+          ]
+        },
+        "parserClass": null, // 自定义解析器
+        "enabled": 1, // 启用状态编码
+        "enabledName": "启用" // 启用状态中文名称
+      }
+    ]
+  }
 }
 ```
+
+自定义字段仅保存和回显，当前不发送远程RPC。前端改为读取`data.records`；超出末页返回空数组并保留`total`。
 
 ### `GET /collection/protocols/21`
 
@@ -976,7 +1024,6 @@ UDP接口填写 `multicastIp` 时通过 `host` 指定的本机网卡加入该组
     "taskId": "TASK-20260908-001", // 外部试验任务编号
     "configName": "遥测 JSON 协议", // 协议配置名称
     "protocolType": 1, // 协议类型：1JSON 2PDXP 3Protobuf 4RPC。枚举：1 JSON，2 PDXP，3 Protobuf，4 RPC
-    "dataSourceType": 1, // 数据源类型：1 遥测，2 遥感，3 设备，4 环境。枚举：1 遥测，2 遥感，3 设备，4 环境
     "configDesc": "标准遥测格式", // 协议配置说明
     "configParams": { // 协议解析使用的动态配置参数
       "encoding": "UTF-8" // 协议字符编码
@@ -989,6 +1036,9 @@ UDP接口填写 `multicastIp` 时通过 `host` 指定的本机网卡加入该组
 
 ### `POST /collection/protocols/create`
 
+协议配置的数据源分类已删除；`configParams` 由普通大文本框中的标准JSON解析为对象后提交，编辑时格式化回填。RPC内部业务字段 `data_source` 继续保留。
+
+
 入参：
 
 ```jsonc
@@ -996,7 +1046,6 @@ UDP接口填写 `multicastIp` 时通过 `host` 指定的本机网卡加入该组
   "taskId": "TASK-20260908-001", // 外部试验任务编号
   "configName": "遥测 JSON 协议", // 协议配置名称
   "protocolType": 1, // 协议类型：1JSON 2PDXP 3Protobuf 4RPC。枚举：1 JSON，2 PDXP，3 Protobuf，4 RPC
-  "dataSourceType": 1, // 数据源类型：1 遥测，2 遥感，3 设备，4 环境。枚举：1 遥测，2 遥感，3 设备，4 环境
   "configDesc": "标准遥测格式", // 协议配置说明
   "configParams": { // 协议解析使用的动态配置参数
     "encoding": "UTF-8" // 协议字符编码
@@ -1016,83 +1065,45 @@ UDP接口填写 `multicastIp` 时通过 `host` 指定的本机网卡加入该组
 }
 ```
 
-PDXP协议的`configParams`示例：
+PDXP协议配置示例，不提交`fields`，参数由后端按设备加载：
 
 ```jsonc
 {
-  "taskId": "TASK-20260908-001",
-  "configName": "遥测PDXP解析配置",
-  "protocolType": 2,
-  "dataSourceType": 1,
-  "configDesc": "PDXP数据域字段解析配置",
+  "taskId": "TASK-20260908-001", // 所属任务
+  "configName": "遥测PDXP解析配置", // 配置名称
+  "protocolType": 2, // PDXP类型
+  "configDesc": "按设备加载本地参数解析配置", // 配置说明
   "configParams": {
-    "pdxphead": {
-      "ver": null,
-      "mid": null,
-      "sid": null,
-      "did": null,
-      "bid": null,
-      "no": null,
-      "flag": null,
-      "res": null
-    },
-    "fields": [
-      {
-        "id": 81,
-        "tableIndex": "1",
-        "bitWidth": "32",
-        "telemetryName": "温度",
-        "telemetryCode": "TMK1001",
-        "formulaType": "109",
-        "formulaDesc": "",
-        "processParam": "",
-        "decimalPlaces": "5",
-        "alarmFlag": "1",
-        "normalValue": "正常:[-1,30]",
-        "warningValue": "",
-        "stateChangeInfo": "",
-        "commandCode": "",
-        "systemName": "发控台",
-        "controlChannel": "",
-        "mergeChannelCount": "0",
-        "delayChannel": "0",
-        "storeFlag": "1",
-        "calibrationFormula": "x*0.1"
-      }
-    ]
+    "deviceSatelliteId": 12 // 当前任务下有效设备卫星主键
   },
-  "parserClass": null,
-  "enabled": 1
+  "parserClass": null, // 自定义解析器
+  "enabled": 1 // 启用
 }
 ```
 
-RPC协议的`configParams`示例：
+RPC协议的`configParams`示例，不提交`deviceSatelliteId`，不要求本地设备或参数导入：
 
 ```jsonc
 {
   "taskId": "TASK-20260908-001",
   "configName": "遥测RPC处理配置",
   "protocolType": 4,
-  "dataSourceType": 1,
   "configDesc": "卫星遥测RPC请求参数",
   "configParams": {
     "fields": [
       {
         "field": "sat_code",
         "fieldName": "卫星代号",
-        "dataType": "string",
         "value": "SAT-001"
       },
       {
         "field": "channel",
         "fieldName": "通道代号",
-        "dataType": "string",
         "value": "CH-01"
       },
       {
         "field": "data_source",
-        "fieldName": "数据源类型",
-        "dataType": "string",
+        "fieldName": "数据源",
         "value": "telemetry"
       }
     ]
@@ -1133,7 +1144,6 @@ FEP文件上传对象存储后发送的文件完成消息：
   "taskId": "TASK-20260908-001", // 外部试验任务编号
   "configName": "遥测 JSON V2", // 协议配置名称
   "protocolType": 1, // 协议类型：1JSON 2PDXP 3Protobuf 4RPC。枚举：1 JSON，2 PDXP，3 Protobuf，4 RPC
-  "dataSourceType": 1, // 数据源类型：1 遥测，2 遥感，3 设备，4 环境。枚举：1 遥测，2 遥感，3 设备，4 环境
   "configDesc": "升级版格式", // 协议配置说明
   "configParams": { // 协议解析使用的动态配置参数
     "encoding": "UTF-8" // 协议字符编码
@@ -1528,7 +1538,7 @@ FEP文件上传对象存储后发送的文件完成消息：
   "message": "操作成功", // 业务处理结果提示信息
   "data": { // 接口返回的业务数据
     "todayProcessedCount": 128000, // 今日成功处理的数据数量
-    "deduplicatedCount": 320 // 当前任务全部历史累计去重数量
+    "deduplicatedCount": 320 // 当前任务仍保留的处理统计记录累计去重数量
   }
 }
 ```
@@ -1627,6 +1637,8 @@ file=@TMtable-A.txt
 
 支持.xls、.xlsx和.txt文件（最大20MB）。Excel按Sheet页签分别创建设备卫星；TXT一次表示一个设备卫星，使用去掉扩展名的文件名填写code和name，自动兼容UTF-8和GBK编码。第一行必须包含19个中文表头，TXT按制表符分列；旧TXT最后一列使用反斜线时按空校准公式处理。每个设备至少有一条有效数据，空行忽略，序号不能重复。完整校验后在同一事务中替换当前taskId下同类型数据，任意失败整体回滚。
 
+如果导入文件未包含仍被PDXP协议配置引用的设备或卫星，返回400，并提示协议配置名称及缺少的设备或卫星名称。例如：`导入文件缺少协议配置【遥测PDXP解析配置】正在使用的设备【设备A】`。
+
 示例：工作簿含“卫星一号”和“卫星二号”两页，分别创建设备卫星，参数关联各自的新ID。再次导入 `taskId=TASK-20260908-001&type=1` 时，只逻辑删除任务TASK-20260908-001的原卫星及参数；任务TASK-20260908-001的设备和其他任务全部保留。
 
 ```json
@@ -1713,6 +1725,8 @@ file=@TMtable-A.txt
 
 入参：查询参数 `taskId=TASK-20260908-001`
 
+统计说明：`calibrationCount` 累计完成校准处理的遥测参数数量，包含正常值和野值，同一参数多次参与分别计数；未匹配启用通道、未开启参数范围检查或校准处理失败时不计数。`cleanedCount` 直接复用 `outlierCount` 的值。三项按当前任务未删除的校准记录汇总，无记录时均为 0。数量及野值详情先进入 Redis 队列，默认每轮落库结束后等待 5 秒再处理下一轮，总览读取已落库的数量；样本及详情过期清理不减少累计值。已有数据库的校准总量从执行升级脚本并更新服务后开始累计，历史总量不补算。
+
 出参：
 
 ```jsonc
@@ -1720,7 +1734,9 @@ file=@TMtable-A.txt
   "code": 200,
   "message": "操作成功",
   "data": {
-    "outlierCount": 320 // 当前任务累计检出的野值数量
+    "calibrationCount": 10000, // 当前任务累计参与校准的遥测参数数量，包含正常值和野值
+    "cleanedCount": 320, // 清洗数量，与 outlierCount 完全相同
+    "outlierCount": 320 // 当前任务历史累计野值数量，详情过期清理不减少累计值
   }
 }
 ```
@@ -1839,6 +1855,8 @@ file=@TMtable-A.txt
 
 查询：taskId=TASK-20260908-001&pageNum=1&pageSize=20
 
+列表每条记录新增 `calibrationCount`，表示当前校准通道累计参与校准的遥测参数数量，包含正常值和野值；复用总览的累计字段，只返回已落库数量，历史总量从升级后开始累计。前端列表增加“校准数量”列，绑定 `row.calibrationCount`。本次记录详情接口不增加该字段。
+
 出参：
 
 ```jsonc
@@ -1855,7 +1873,8 @@ file=@TMtable-A.txt
         "taskId": "TASK-20260908-001", // 外部试验任务编号
         "channelId": 91, // 校准通道 ID
         "channelName": "温度通道1", // 校准通道名称
-        "outlierCount": 3 // 累计检出的野值数量
+        "calibrationCount": 1000, // 当前通道累计参与校准的遥测参数数量，包含正常值和野值
+        "outlierCount": 3 // 历史累计野值数量，可能大于保留的详情总数
       }
     ]
   }
@@ -2250,7 +2269,7 @@ GET /system/logs?taskId=TASK-20260908-001&logLevel=ERROR&logSource=COLLECTION&op
 非法公式、缺少系数、除零、数值溢出或非整数时间计数会终止当前帧后续处理，并记录中文错误上下文；身份完整且数据域可提取时只保存包含各类头的异常整帧；不会用原码伪装成计算成功的物理量。
 ### 遥测整帧检查结果与查询
 
-`GET /processing/realtime/telemetry?taskId=728101&deviceSatelliteId=11` 查询正常及异常整帧。当前记录示例：
+`GET /processing/realtime/telemetry?taskId=728101&interfaceId=14` 查询正常及异常整帧。当前记录示例：
 
 ```json
 {"deviceSatelliteId":11,"time":"2026-10-13T10:00:00","deviceSatelliteName":"设备通道_001","channelName":"设备通道","rawLength":46,"rawFrame":"34 12 80 01 00 01 00 00 00 01 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 37 26 00 2A 75 15 0C 00 05 04 03 02 01 41 42 43 01 00 00 00","checkResultName":"正常"}
@@ -2260,13 +2279,13 @@ RPC消息的frame_check_status=false时，checkResultName写“异常”；true�
 
 本地参数解析失败时，只要PDXP包和去头数据域已提取、任务编号和设备卫星ID有效、设备名称符合“通道名称_业务标识”，便通过已有入库线程池保存异常_frame。设备名称来自接口配置，通道名称取首个下划线前缀，raw保存传输头、PDXP包头、自定义数据、遥测数据和遥测帧头组成的完整帧，时间使用PDXP发送时间；不写参数、不发送遥测消息、不计入成功处理量。不能拆分数据域或缺少有效身份时，不创建占位路径；该回退仍要求报文和数据域可正确拆分。
 
-`GET /processing/realtime/invalid?taskId=728101&deviceSatelliteId=11` 按checkResultName不为“正常”分页查询，记录示例：
+`GET /processing/realtime/invalid?taskId=728101&interfaceId=14` 按checkResultName不为“正常”分页查询，记录示例：
 
 ```json
 {"deviceSatelliteId":11,"receiveTime":"2026-10-13T10:00:00","deviceSatelliteName":"设备通道_001","channelName":"设备通道","rawLength":46,"rawFrame":"34 12 80 01 00 01 00 00 00 01 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 37 26 00 2A 75 15 0C 00 05 04 03 02 01 41 42 43 01 00 00 00","checkResultName":"异常"}
 ```
 
-两个整帧查询接口均支持pageNum、pageSize，设备卫星ID可选。IoTDB路径为`root.db.task_728101.device_11.tms.device._frame`，测点仅为deviceSatelliteName、channelName、raw、checkResultName；rawLength和十六进制rawFrame由包含各类头的完整帧派生。参数节点raw仍是参数原码，发送Proto的frame_raw_data仍是去头数据域。旧记录保持原有字节，不自动补头。任务节点含特殊字符时使用路径工具转换后的实际名称。处理后参数和曲线查询仍使用taskId、selectionType、targetId，并按保存的勾选参数并发查询，不接收整帧分页参数。
+两个整帧查询接口均支持pageNum、pageSize，采集接口ID即interfaceId可选，不再以deviceSatelliteId筛选。新整帧IoTDB路径为`root.db.task_728101.interface_14.device_11.tms.device._frame`，测点仅为deviceSatelliteName、channelName、raw、checkResultName；rawLength和十六进制rawFrame由包含各类头的完整帧派生。参数节点raw仍是参数原码，发送Proto的frame_raw_data仍是去头数据域。旧记录保持原有字节，不自动补头。任务节点含特殊字符时使用路径工具转换后的实际名称。处理后参数和曲线查询仍使用taskId、selectionType、targetId，并按已保存勾选参数及其所属类型并发查询：设备使用taskId、设备主键和遥测代号，卫星使用taskId、rpc_前缀节点和遥测代号，不接收整帧分页参数。同一代号多个路径按时间取最新一条或最近120个有效点。原始帧响应字段保持现有结构，不新增接口主键或名称。
 
 ### `GET /alarms/findData`
 
@@ -2545,3 +2564,60 @@ RPC消息的frame_check_status=false时，checkResultName写“异常”；true�
   }
 }
 ```
+
+### PDXP接收附加头长度
+
+本文已有PDXP整帧示例使用默认2字节传输头、5字节自定义数据、4字节遥测帧头。现在这些长度读取处理服务的 `data-processing.pdxp` 配置，三个字段依次为 `transport-header-length`、`custom-data-length`、`telemetry-header-length`，0表示没有。配置变化后，rawLength和rawFrame仍由实际完整接收帧计算，不按默认长度补头或截断；旧记录字节不变，接口请求和返回字段不变。RPC的data仍按实际遥测帧头加遥测数据还原，遥测帧头为0时只发送遥测数据。
+
+
+### RPC完整帧查询说明
+
+查询 `GET /processing/realtime/telemetry?taskId=TASK-20260908-001&pageNum=1&pageSize=20`，不传 `interfaceId` 时包含当前任务下新旧路径的RPC及本地帧；传 `interfaceId` 时只查对应接口节点；查询异常帧时使用相同参数调用 `/processing/realtime/invalid`。RPC帧的设备主键为 `null`，不是需要前端补填的值。
+
+```jsonc
+{
+  "code": 200, // 查询成功
+  "message": "操作成功", // 提示信息
+  "data": {
+    "pageNum": 1, // 当前页码
+    "pageSize": 20, // 每页记录数
+    "total": 1, // 符合条件的完整帧总数
+    "records": [
+      {
+        "deviceSatelliteId": null, // RPC独立卫星通道身份，没有本地设备主键
+        "time": "2026-10-14T10:00:00", // 消息时间
+        "deviceSatelliteName": "卫星一号", // RPC卫星名称，缺失时显示代号
+        "channelName": "通道一号", // RPC通道名称，缺失时显示代号
+        "rawLength": 2, // 完整采集帧长度；此处仅为结构示例
+        "rawFrame": "01 02", // 原码展示格式示例
+        "checkResultName": "正常" // 帧检查结果
+      }
+    ]
+  }
+}
+```
+
+RPC存储按返回卫星和通道代号构造独立身份节点。返回缺少任一代号时不使用未知节点替代，并记录本帧入库失败。旧RPC设备节点数据保留，不自动迁移。
+
+
+### `POST /collection/receive/**`（数据处理服务）
+
+请求地址示例：`http://localhost:8083/collection/receive/telemetry`。请求头使用 `Content-Type: application/json`，现有鉴权启用且未豁免时携带Bearer Token。业务结构暂未固定，例如：
+
+```json
+{
+  "source": "测试发送端",
+  "payload": { "value": 123 }
+}
+```
+
+响应：
+
+```json
+{
+  "code": 200,
+  "message": "操作成功"
+}
+```
+
+所有前缀下路径统一应答，当前不查询配置、不检查启用状态、不入库、不发布消息、不统计；返回成功仅表示请求已收到且JSON能解析。

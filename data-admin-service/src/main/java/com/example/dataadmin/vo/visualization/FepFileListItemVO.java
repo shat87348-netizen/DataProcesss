@@ -1,5 +1,6 @@
 package com.example.dataadmin.vo.visualization;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.time.LocalDateTime;
 
 /** 图片与文件组件共用的文件列表记录。 */
@@ -16,8 +17,11 @@ public class FepFileListItemVO {
     private String fileType;
     /** 文件字节数。 */
     private Long fileLength;
-    /** 对外访问地址。 */
+    /** 查询时生成的临时签名地址，默认一小时有效，前端可以直接展示或下载。 */
     private String fileUrl;
+    /** 内部签名所需的对象名称，不属于接口出参。 */
+    @JsonIgnore
+    private String objectName;
     /** 文件接收完成时间。 */
     private LocalDateTime completedTime;
 
@@ -35,6 +39,8 @@ public class FepFileListItemVO {
     public void setFileLength(Long value) { this.fileLength = value; }
     public String getFileUrl() { return fileUrl; }
     public void setFileUrl(String value) { this.fileUrl = value; }
+    public String getObjectName() { return objectName; }
+    public void setObjectName(String value) { this.objectName = value; }
     public LocalDateTime getCompletedTime() { return completedTime; }
     public void setCompletedTime(LocalDateTime value) { this.completedTime = value; }
 }

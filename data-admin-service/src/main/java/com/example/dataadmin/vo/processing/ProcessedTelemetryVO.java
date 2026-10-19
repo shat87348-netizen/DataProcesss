@@ -4,7 +4,7 @@ import java.time.LocalDateTime;
 
 /** IoTDB处理后参数的页面返回结构。 */
 public class ProcessedTelemetryVO {
-    /** 路径中的设备卫星主键。 */
+    /** 已保存勾选记录所属的设备卫星主键。 */
     private Long deviceSatelliteId;
     /** 路径末级遥测代号。 */
     private String telemetryCode;

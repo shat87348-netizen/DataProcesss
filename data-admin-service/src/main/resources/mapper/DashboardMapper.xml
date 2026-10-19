@@ -4,7 +4,7 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.example.dataadmin.mapper.DashboardMapper">
 
-    <!-- 今日处理量只统计当天有效窗口，累计去重数量包含已归档的历史窗口。 -->
+    <!-- 今日处理量统计当天有效窗口，累计去重数只汇总仍存在的历史窗口。 -->
     <select id="findProcessingOverview"
             resultType="com.example.dataadmin.vo.processing.DataProcessingOverviewVO">
         select
@@ -92,21 +92,5 @@
         </if>
         order by id
     </select>
-
-    <!-- 超过保留期限的采集统计执行逻辑删除。 -->
-    <update id="deleteCollectionStatisticsBefore">
-        update collect_interface_statistics
-        set is_deleted = 1
-        where statistics_time &lt; #{beforeTime}
-          and is_deleted = 0
-    </update>
-
-    <!-- 超过保留期限的处理统计执行逻辑删除。 -->
-    <update id="deleteProcessingStatisticsBefore">
-        update data_processing_statistics
-        set is_deleted = 1
-        where statistics_time &lt; #{beforeTime}
-          and is_deleted = 0
-    </update>
 
 </mapper>

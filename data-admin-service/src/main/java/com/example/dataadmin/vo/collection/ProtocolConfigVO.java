@@ -15,7 +15,6 @@ public class ProtocolConfigVO {
     private String taskId;
     private String configName;
     private Integer protocolType;
-    private Integer dataSourceType;
     private String configDesc;
     private Map<String, Object> configParams;
     private String parserClass;
@@ -58,19 +57,6 @@ public class ProtocolConfigVO {
     /** 返回协议类型中文名称。 */
     public String getProtocolTypeName() {
         return EnumData.labelOf(BusinessEnums.ProtocolType.values(), protocolType);
-    }
-
-    public Integer getDataSourceType() {
-        return dataSourceType;
-    }
-
-    public void setDataSourceType(Integer dataSourceType) {
-        this.dataSourceType = dataSourceType;
-    }
-
-    /** 返回数据来源类型中文名称。 */
-    public String getDataSourceTypeName() {
-        return EnumData.labelOf(BusinessEnums.DataSourceType.values(), dataSourceType);
     }
 
     public String getConfigDesc() {

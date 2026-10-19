@@ -16,8 +16,6 @@ public class CollectProtocolConfig {
     private String configName;
     /** 协议类型：1 JSON，2 PDXP，3 Protobuf，4 RPC。 */
     private Integer protocolType;
-    /** 数据源类型：1 遥测，2 遥感，3 设备，4 环境。 */
-    private Integer dataSourceType;
     /** 描述。 */
     private String configDesc;
     /** 协议配置参数。 */
@@ -63,14 +61,6 @@ public class CollectProtocolConfig {
 
     public void setProtocolType(Integer protocolType) {
         this.protocolType = protocolType;
-    }
-
-    public Integer getDataSourceType() {
-        return dataSourceType;
-    }
-
-    public void setDataSourceType(Integer dataSourceType) {
-        this.dataSourceType = dataSourceType;
     }
 
     public String getConfigDesc() {

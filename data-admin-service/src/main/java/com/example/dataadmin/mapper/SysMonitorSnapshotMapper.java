@@ -13,5 +13,4 @@ public interface SysMonitorSnapshotMapper {
     int insert(SysMonitorSnapshot snapshot);
     List<SysMonitorSnapshot> findHistory(
             @Param("startTime") LocalDateTime startTime);
-    int deleteBefore(@Param("expiredTime") LocalDateTime expiredTime);
 }

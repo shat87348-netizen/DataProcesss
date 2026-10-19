@@ -10,7 +10,6 @@
         task_id,
         config_name,
         protocol_type,
-        data_source_type,
         config_desc,
         config_params,
         parser_class,
@@ -20,7 +19,46 @@
         update_time
     </sql>
 
-    <!-- 按试验任务查询协议配置。 -->
+    <!-- 分页列表和总数统计共用筛选条件，未传条件不参与查询。 -->
+    <sql id="queryConditions">
+        <if test="taskId != null and taskId != ''">
+            and task_id = #{taskId}
+        </if>
+        <if test="protocolType != null">
+            and protocol_type = #{protocolType}
+        </if>
+        <!-- HTTP协议选择框可以只加载启用记录，其他页面不传时查询所有状态。 -->
+        <if test="enabled != null">
+            and enabled = #{enabled}
+        </if>
+        <if test="configName != null and configName != ''">
+            <!-- 在MyBatis中生成包含匹配参数，避免数据库执行多参数字符串拼接。 -->
+            <bind name="configNamePattern" value="'%' + configName + '%'"/>
+            and config_name like #{configNamePattern}
+        </if>
+    </sql>
+
+    <!-- 先统计符合条件且未删除的协议配置总数。 -->
+    <select id="count" resultType="long">
+        select count(id)
+        from collect_protocol_config
+        where is_deleted = 0
+        <include refid="queryConditions"/>
+    </select>
+
+    <!-- 使用稳定的主键倒序读取当前页，只查询明确列出的字段。 -->
+    <select id="findPage"
+            resultType="com.example.dataadmin.entity.CollectProtocolConfig">
+        select
+            <include refid="columns"/>
+        from collect_protocol_config
+        where is_deleted = 0
+        <include refid="queryConditions"/>
+        order by id desc
+        limit #{pageSize} offset #{offset}
+    </select>
+
+    <!-- 保留业务内部按试验任务读取全部协议的入口。 -->
     <select id="findAllByTaskId"
             resultType="com.example.dataadmin.entity.CollectProtocolConfig">
         select
@@ -43,6 +81,24 @@
           and is_deleted = 0
     </select>
 
+    <!-- 写事务中锁定协议行，防止HTTP校验通过后被并发修改或删除。 -->
+    <select id="findByIdForUpdate"
+            resultType="com.example.dataadmin.entity.CollectProtocolConfig">
+        select
+            <include refid="columns"/>
+        from collect_protocol_config
+        where is_deleted = 0
+        <choose>
+            <when test="id != null">
+                and id = #{id}
+            </when>
+            <otherwise>
+                and 1 = 0
+            </otherwise>
+        </choose>
+        for update
+    </select>
+
     <!-- 新增协议配置并通过序列生成主键。 -->
     <insert id="insert">
         <selectKey keyProperty="id" resultType="long" order="BEFORE">
@@ -53,7 +109,6 @@
             task_id,
             config_name,
             protocol_type,
-            data_source_type,
             config_desc,
             config_params,
             parser_class,
@@ -65,7 +120,6 @@
             #{taskId},
             #{configName},
             #{protocolType},
-            #{dataSourceType},
             #{configDesc},
             #{configParams},
             #{parserClass},
@@ -80,7 +134,6 @@
         set task_id = #{taskId},
             config_name = #{configName},
             protocol_type = #{protocolType},
-            data_source_type = #{dataSourceType},
             config_desc = #{configDesc},
             config_params = #{configParams},
             parser_class = #{parserClass},

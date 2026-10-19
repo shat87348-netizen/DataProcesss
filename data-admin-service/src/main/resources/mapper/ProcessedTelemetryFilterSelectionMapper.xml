@@ -13,7 +13,7 @@
     <select id="findSelected" resultType="com.example.dataadmin.entity.ProcessedTelemetryFilterSelection">
         select selection.task_id, selection.device_satellite_id, selection.telemetry_code,
                selection.selection_type, selection.target_id,
-               rule_config.telemetry_name
+               rule_config.telemetry_name, device.type as device_satellite_type
         from processed_telemetry_filter_selection selection
         inner join device_satellite device
           on device.id = selection.device_satellite_id

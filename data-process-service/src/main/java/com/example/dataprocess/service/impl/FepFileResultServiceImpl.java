@@ -45,7 +45,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 public class FepFileResultServiceImpl implements FepFileResultService {
     /** 告警组件采用独立注入，复用已有离线构造入口。 */
     @org.springframework.beans.factory.annotation.Autowired
-    private com.example.dataprocess.service.DataAlarmRecorder alarmRecorder;
+    private com.example.dataprocess.alarm.DataAlarmRecorder alarmRecorder;
 
 
 

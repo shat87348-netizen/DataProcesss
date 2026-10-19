@@ -3,6 +3,7 @@ package com.example.dataprocess.processing.handler;
 import SatDataCenter.DataExchange.TmTc.TelemetryMessages.TelemetryMessage;
 import com.example.dataprocess.collection.CollectInterfaceStatistics;
 import com.example.dataprocess.collection.ReceivedDatagram;
+import com.example.dataprocess.config.PdxpFramingProperties;
 import com.example.dataprocess.entity.CollectInterfaceRuntimeConfig;
 import com.example.dataprocess.processing.processor.DataProcessor;
 import com.example.dataprocess.processing.processor.LocalDataProcessor;
@@ -10,7 +11,7 @@ import com.example.dataprocess.processing.processor.RpcDataProcessor;
 import com.example.dataprocess.service.CalibrationProcessingService;
 import com.example.dataprocess.service.IoTDBTelemetryStorageService;
 import com.example.dataprocess.service.TelemetryMessageService;
-import com.example.dataprocess.service.TelemetryResultDispatcher;
+import com.example.dataprocess.processing.dispatcher.TelemetryResultDispatcher;
 import com.example.dataprocess.protocol.rpc.PdxpDataPayload;
 import com.example.dataprocess.protocol.rpc.PdxpDataPayloadParser;
 import com.example.dataprocess.tool.PdxpParser;
@@ -32,9 +33,17 @@ import java.util.function.BooleanSupplier;
 /** PDXP协议接收和业务处理入口，RPC仍是正常PDXP帧后的处理分支。 */
 @Component
 public class PdxpProtocolHandler implements ProtocolHandler {
+    /** 运行环境注入同一份拆帧配置，离线构造时保持既有默认长度。 */
+    private PdxpFramingProperties framingProperties = new PdxpFramingProperties();
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setFramingProperties(PdxpFramingProperties framingProperties) {
+        this.framingProperties = framingProperties;
+    }
+
     /** 告警组件采用独立注入，复用已有离线构造入口。 */
     @org.springframework.beans.factory.annotation.Autowired
-    private com.example.dataprocess.service.DataAlarmRecorder alarmRecorder;
+    private com.example.dataprocess.alarm.DataAlarmRecorder alarmRecorder;
 
     /** 提交异常上下文，采集线程不直接写数据库。 */
     private void alarm(com.example.dataprocess.entity.CollectInterfaceRuntimeConfig config,
@@ -145,7 +154,8 @@ public class PdxpProtocolHandler implements ProtocolHandler {
         List<PdxpParser.PdxpPacket> packets;
         try {
             // PDXP解析只在数据处理线程中执行。
-            packets = PdxpParser.parseTransportUdp(datagram.getData());
+            packets = PdxpParser.parseTransportUdp(datagram.getData(),
+                    framingProperties.getTransportHeaderLength());
         } catch (Exception exception) {
             alarm(datagram.getInterfaceConfig(), com.example.common.enums.DataAlarmType.PACKET_PARSE,
                     "报文长度：" + datagram.getData().length + "；解析失败：" + exception.getMessage());
@@ -182,7 +192,8 @@ public class PdxpProtocolHandler implements ProtocolHandler {
         try {
             // 第一步：拆分自定义数据、遥测原始数据和遥测帧头。
             PdxpDataPayload payload = PdxpDataPayloadParser.parse(
-                    packet.getData());
+                    packet.getData(), framingProperties.getCustomDataLength(),
+                    framingProperties.getTelemetryHeaderLength());
             payloadParsed = true;
             // 第二步：rpc_enabled只决定正常PDXP帧后的业务处理分支。
             DataProcessor processor = Integer.valueOf(1).equals(
@@ -241,7 +252,7 @@ public class PdxpProtocolHandler implements ProtocolHandler {
                 saveLocalAbnormalFrame(config, packet);
             }
             // 校准层已记录具体参数时不重复生成接口级告警。
-            if (!(exception instanceof com.example.dataprocess.service.RecordedDataAlarmException)) {
+            if (!(exception instanceof com.example.dataprocess.exception.RecordedDataAlarmException)) {
                 alarm(config, stage, "包序号：" + packet.getSequenceNumber() + "；当前帧处理失败：" + exception.getMessage());
             }
             LOGGER.error("正常PDXP帧后续处理失败，接口编号：{}，包序号：{}",

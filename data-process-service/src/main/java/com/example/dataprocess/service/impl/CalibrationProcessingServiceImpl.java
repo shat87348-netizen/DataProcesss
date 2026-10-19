@@ -2,6 +2,7 @@ package com.example.dataprocess.service.impl;
 
 import SatDataCenter.DataExchange.TmTc.TelemetryMessages.Telemetry;
 import SatDataCenter.DataExchange.TmTc.TelemetryMessages.TelemetryMessage;
+import com.example.common.calibration.CalibrationCountCache;
 import com.example.common.calibration.CalibrationRedisKeys;
 import com.example.common.calibration.CalibrationRecordDetailCache;
 import com.example.common.calibration.CalibrationSample;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -32,7 +34,7 @@ import java.util.regex.Pattern;
 public class CalibrationProcessingServiceImpl implements CalibrationProcessingService {
     /** 告警组件采用独立注入，复用已有离线构造入口。 */
     @org.springframework.beans.factory.annotation.Autowired
-    private com.example.dataprocess.service.DataAlarmRecorder alarmRecorder;
+    private com.example.dataprocess.alarm.DataAlarmRecorder alarmRecorder;
 
     /** 提交异常上下文，采集线程不直接写数据库。 */
     private void alarm(com.example.dataprocess.entity.CollectInterfaceRuntimeConfig config,
@@ -87,26 +89,75 @@ public class CalibrationProcessingServiceImpl implements CalibrationProcessingSe
         Map<String, CalibrationChannelRuntimeConfig> configs =
                 interfaceConfig.getCalibrationConfigMap();
 
-        // 清空遥测映射后，让每个参数使用自身公式匹配到的配置更新野值标识。
+        // 第一步：按校准通道合并本条消息的参数数量，避免每个正常参数单独入队。
+        Map<Long, Long> calibrationCounts = new LinkedHashMap<Long, Long>();
+        // 第二步：清空遥测映射，让每个参数使用自身公式匹配到的配置更新野值标识。
         TelemetryMessage.Builder result = message.toBuilder().clearTelemetries();
-        for (Map.Entry<String, Telemetry> entry : message.getTelemetriesMap().entrySet()) {
-            Telemetry telemetry = entry.getValue();
-            CalibrationChannelRuntimeConfig config = configs.get(
-                    trimmed(telemetry.getCalibrationFormula()));
-            Telemetry processed;
-            try {
-                processed = config == null ? telemetry : processTelemetry(interfaceConfig, config, message, telemetry);
-            } catch (Exception exception) {
-                if (alarmRecorder != null) {
-                    alarmRecorder.record(interfaceConfig, com.example.common.enums.DataAlarmType.CALIBRATION_RULE,
-                            telemetry.getTmSymbol(), telemetry.getTmName(), config == null ? null : config.getId(),
-                            telemetry.getCalibrationFormula(), "校准判定失败：" + exception.getMessage());
+        try {
+            for (Map.Entry<String, Telemetry> entry : message.getTelemetriesMap().entrySet()) {
+                Telemetry telemetry = entry.getValue();
+                CalibrationChannelRuntimeConfig config = configs.get(
+                        trimmed(telemetry.getCalibrationFormula()));
+                Telemetry processed;
+                try {
+                    processed = config == null
+                            ? telemetry
+                            : processTelemetry(interfaceConfig, config, message, telemetry);
+                    // 仅累加已匹配启用通道且完成校准处理的参数，正常值和野值均计数。
+                    if (config != null) {
+                        calibrationCounts.put(config.getId(),
+                                calibrationCounts.getOrDefault(config.getId(), 0L) + 1L);
+                    }
+                } catch (Exception exception) {
+                    if (alarmRecorder != null) {
+                        alarmRecorder.record(interfaceConfig,
+                                com.example.common.enums.DataAlarmType.CALIBRATION_RULE,
+                                telemetry.getTmSymbol(), telemetry.getTmName(),
+                                config == null ? null : config.getId(),
+                                telemetry.getCalibrationFormula(),
+                                "校准判定失败：" + exception.getMessage());
+                    }
+                    throw new com.example.dataprocess.exception.RecordedDataAlarmException(
+                            "校准判定失败", exception);
                 }
-                throw new com.example.dataprocess.service.RecordedDataAlarmException("校准判定失败", exception);
+                result.putTelemetries(entry.getKey(), processed);
             }
-            result.putTelemetries(entry.getKey(), processed);
+            return result.build();
+        } finally {
+            // 第三步：即使后续参数处理失败，也保留本条消息中已经完成校准的数量。
+            cacheCalibrationCounts(interfaceConfig, calibrationCounts);
         }
-        return result.build();
+    }
+
+    /** 将当前消息的通道校准数量一次性写入待落库队列。 */
+    private void cacheCalibrationCounts(
+            CollectInterfaceRuntimeConfig interfaceConfig,
+            Map<Long, Long> calibrationCounts) {
+        // 第一步：没有匹配校准通道的消息无需访问数量队列。
+        if (calibrationCounts.isEmpty()) {
+            return;
+        }
+        try {
+            // 第二步：按通道生成数量增量，采集线程只写缓存，不直接访问数据库。
+            List<String> jsonValues = new ArrayList<String>(calibrationCounts.size());
+            for (Map.Entry<Long, Long> entry : calibrationCounts.entrySet()) {
+                CalibrationCountCache count = new CalibrationCountCache();
+                count.setTaskId(interfaceConfig.getTaskId());
+                count.setChannelId(entry.getKey());
+                count.setInterfaceId(interfaceConfig.getInterfaceId());
+                count.setCalibrationCount(entry.getValue());
+                jsonValues.add(objectMapper.writeValueAsString(count));
+            }
+            // 第三步：通过一次缓存操作提交全部通道的数量，交给定时任务合并落库。
+            redisTemplate.opsForList().rightPushAll(
+                    CalibrationRedisKeys.PENDING_COUNT_QUEUE, jsonValues);
+        } catch (Exception exception) {
+            // 数量缓存失败沿用现有校准缓存告警，避免影响遥测数据处理结果。
+            alarm(interfaceConfig, com.example.common.enums.DataAlarmType.CALIBRATION_CACHE,
+                    "校准参数数量未进入缓存：" + exception.getMessage());
+            LOGGER.error("保存校准参数数量缓存失败，试验任务：{}，采集接口：{}",
+                    interfaceConfig.getTaskId(), interfaceConfig.getInterfaceId(), exception);
+        }
     }
 
     /** 检测单个遥测参数并分别维护原始样本和有效样本。 */

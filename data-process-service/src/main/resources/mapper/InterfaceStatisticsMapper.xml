@@ -4,7 +4,25 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.example.dataprocess.mapper.InterfaceStatisticsMapper">
 
-    <!-- 批量写入已结束的采集五秒窗口，重试时覆盖同一窗口避免重复累计。 -->
+    <!-- 锁定接口行后再读取窗口旧值，同一接口的并发写入不会重复计算差量。 -->
+    <select id="lockCollectionInterface" resultType="long">
+        select id
+        from collect_interface_config
+        where id = #{interfaceId}
+          and task_id = #{taskId}
+        for update
+    </select>
+
+    <!-- 窗口不存在时返回空值，由事务写入层按零计算新增量。 -->
+    <select id="findStoredCollectionCount" resultType="long">
+        select collection_count
+        from collect_interface_statistics
+        where task_id = #{taskId}
+          and interface_id = #{interfaceId}
+          and statistics_time = #{statisticsTime}
+    </select>
+
+    <!-- 批量写入已结束的采集五秒窗口，重试时保留较大的窗口计数。 -->
     <insert id="saveCollectionStatistics">
         insert into collect_interface_statistics (
             task_id,
@@ -26,10 +44,20 @@
         </foreach>
         on conflict (task_id, interface_id, statistics_time)
         do update set
-            collection_count = excluded.collection_count,
+            <!-- 重复窗口只接受更大的完整帧数，避免较旧重试把累计值回退。 -->
+            collection_count = greatest(collect_interface_statistics.collection_count,
+                                        excluded.collection_count),
             interface_rate = excluded.interface_rate,
             is_deleted = 0
     </insert>
+
+    <!-- 事务内原子累加接口长期采集量，任务编号必须与接口归属一致。 -->
+    <update id="addInterfaceCollectionCount">
+        update collect_interface_config
+        set data_packet_count = coalesce(data_packet_count, 0) + #{increment}
+        where id = #{interfaceId}
+          and task_id = #{taskId}
+    </update>
 
     <!-- 批量写入已结束的处理五秒窗口，重试时覆盖同一窗口避免重复累计。 -->
     <insert id="saveProcessingStatistics">

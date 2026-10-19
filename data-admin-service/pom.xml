@@ -13,6 +13,18 @@
     <artifactId>data-admin-service</artifactId>
 
     <dependencies>
+        <!-- 文件列表通过对象存储客户端生成浏览器可直接使用的临时读取地址。 -->
+        <dependency>
+            <groupId>io.minio</groupId>
+            <artifactId>minio</artifactId>
+            <version>${minio.version}</version>
+        </dependency>
+        <!-- 与处理服务复用兼容版本，满足当前对象存储客户端的运行要求。 -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <version>${okhttp.version}</version>
+        </dependency>
         <!-- 读取 Excel 工作簿及工作表页签，支持两种常用 Excel 格式。 -->
         <dependency>
             <groupId>org.apache.poi</groupId>

@@ -89,15 +89,12 @@ public class PdxpTestInterfaceController {
                 "{\"fields\":["
                         + "{\"field\":\"sat_code\","
                         + "\"fieldName\":\"卫星代号\","
-                        + "\"dataType\":\"string\","
                         + "\"value\":\"74\"},"
                         + "{\"field\":\"channel\","
-                        + "\"fieldName\":\"通道\","
-                        + "\"dataType\":\"string\","
+                        + "\"fieldName\":\"通道代号\","
                         + "\"value\":\"12\"},"
                         + "{\"field\":\"data_source\","
-                        + "\"fieldName\":\"数据来源\","
-                        + "\"dataType\":\"string\","
+                        + "\"fieldName\":\"数据源\","
                         + "\"value\":\"SIMULATOR\"}"
                         + "]}");
         return config;

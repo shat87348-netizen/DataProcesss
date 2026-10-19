@@ -22,8 +22,8 @@ public final class UdpInterfaceReceiver implements CollectInterfaceReceiver {
     /** 当前接口对应的协议会话。 */
     private final ProtocolHandler.UdpSession protocolSession;
     /** 接收异常复用异步告警组件，由接口管理器在提交前注入。 */
-    private com.example.dataprocess.service.DataAlarmRecorder alarmRecorder;
-    public void setAlarmRecorder(com.example.dataprocess.service.DataAlarmRecorder recorder) { this.alarmRecorder = recorder; }
+    private com.example.dataprocess.alarm.DataAlarmRecorder alarmRecorder;
+    public void setAlarmRecorder(com.example.dataprocess.alarm.DataAlarmRecorder recorder) { this.alarmRecorder = recorder; }
     private void recordFailure(String detail) {
         if (alarmRecorder != null) {
             alarmRecorder.record(config, com.example.common.enums.DataAlarmType.INTERFACE_STOP, detail);

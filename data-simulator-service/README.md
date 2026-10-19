@@ -4,7 +4,7 @@
 
 ## 部署
 
-1. 在金仓PostgreSQL兼容模式数据库执行仓库根目录的 [sql/data-simulator-service.sql](../sql/data-simulator-service.sql)。同一文件用于新库建表及已有模拟源表补字段，不修改旧模块数据表，不再单独维护升级脚本。
+1. 在金仓PostgreSQL兼容模式数据库执行仓库根目录的 [sql/data-simulator-service.sql](../sql/data-simulator-service.sql)。同一文件用于新库建表、已有模拟源表补字段、删除全部业务CHECK及历史FEP编码4迁移为3；主键、外键、非空及唯一索引保留。不修改旧模块数据表，不再单独维护升级脚本。
 2. 将仓库根目录的 [nacos-config/data-simulator-service.yaml](../nacos-config/data-simulator-service.yaml) 内容导入Nacos：配置标识为 `data-simulator-service.yaml`，分组默认为 `DEFAULT_GROUP`，格式为YAML。直接按环境填写数据库连接、账号和密码，不使用环境变量占位符。默认数据库地址为 `jdbc:kingbase8://127.0.0.1:54321/data_processing`，用户名为 `system`，密码按配置文件当前值读取，部署时核对实际凭据。
 3. 在仓库根目录执行 `mvn -pl data-simulator-service -am package -DskipTests`。
 4. 执行 `java -jar data-simulator-service/target/data-simulator-service-1.0.0-SNAPSHOT.jar`，默认端口8085，需调整时修改Nacos配置中的 `server.port`。
@@ -105,7 +105,7 @@ FEP不允许提交PDXP参数，不创建PDXP参数记录。公共参数位于Nac
 | GET /simulator/sources/{id}/runs | 分页历史，删除后仍可查询 |
 | GET /simulator/findData | 中文枚举与协议默认值 |
 
-统一返回 `code`、`message` 和可选 `data`。参数错误返回HTTP 400，名称或状态冲突返回409，未预期错误返回500。修改为完整更新，省略协议可选参数会恢复默认值，不是局部补丁。
+统一返回 `code`、`message` 和可选 `data`。参数错误返回HTTP 400，名称、状态或数据库关联冲突返回409，未预期错误返回500。409具体区分名称重复、重复启动、主键序列异常和旧CHECK未清理，数据库原始异常写入中文上下文日志，前端仅展示message。修改为完整更新，省略协议可选参数会恢复默认值，不是局部补丁。
 
 ## 统计与运行限制
 
@@ -121,3 +121,10 @@ FEP不允许提交PDXP参数，不创建PDXP参数记录。公共参数位于Nac
 ## 已执行验证
 
 未新增单元测试或测试依赖。已执行公共模块与旧模拟源已有测试；对新模块使用独立金仓PostgreSQL兼容数据库和本机UDP/TCP接收端进行接口验证，验证记录见 `docs/verification.md`。
+
+
+## 数据库业务校验升级
+
+协议和传输方式组合、端口、发送间隔、是否循环、运行状态及PDXP各段长度均由后端校验。模拟源三张表不再创建业务CHECK；已有库统一重跑根目录 `sql/data-simulator-service.sql`，脚本按系统目录识别并删除三张表的CHECK，不依赖历史约束名称。
+
+同一事务中将历史FEP配置的 `transfer_protocol=4` 迁移为3，运行记录中的原始配置快照保持历史值。脚本可重复执行；保留主键、外键、非空和唯一索引。升级后使用当前代码的FEP编码3创建模拟源。

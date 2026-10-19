@@ -1,5 +1,6 @@
 package com.example.dataadmin.mapper;
 
+import com.example.common.enums.TelemetryFrameStatus;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.springframework.stereotype.Component;
 
@@ -17,22 +18,26 @@ public class IoTDBFrameQueryMapper {
         this.sqlSessionFactory = sqlSessionFactory;
     }
 
-    /** 生成任务范围内的实时整帧分页查询。 */
+    /** 生成任务范围内检查正常的整帧分页查询。 */
     public String realtimeFrames(
             String devicePath,
             int limit,
             long offset) {
         // 第一步：通过已校验设备路径限定任务和采集接口。
         Map<String, Object> parameters = baseParameters(devicePath);
+        // 正常帧条件使用已有检查结果枚举，与入库使用的中文名称一致。
+        parameters.put("normalStatus", TelemetryFrameStatus.NORMAL.getLabel());
         // 第二步：传递分页参数并生成IoTDB可直接执行的语句。
         parameters.put("limit", limit);
         parameters.put("offset", offset);
         return mappedSql("realtimeFrames", parameters);
     }
 
-    /** 生成任务范围内的实时整帧总数查询。 */
+    /** 生成任务范围内检查正常的整帧总数查询，与列表筛选保持一致。 */
     public String countRealtimeFrames(String devicePath) {
         Map<String, Object> parameters = baseParameters(devicePath);
+        // 分页总数沿用列表相同的正常状态，避免把异常帧计入总数。
+        parameters.put("normalStatus", TelemetryFrameStatus.NORMAL.getLabel());
         return mappedSql("countRealtimeFrames", parameters);
     }
 

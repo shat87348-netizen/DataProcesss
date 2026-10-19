@@ -12,6 +12,7 @@ import com.example.dataadmin.mapper.CalibRecordMapper;
 import com.example.dataadmin.service.CollectInterfaceRuntimeSyncService;
 import com.example.dataadmin.service.DataCalibrationService;
 import com.example.dataadmin.vo.calibration.CalibRecordDetailVO;
+import com.example.dataadmin.vo.calibration.CalibRecordListVO;
 import com.example.dataadmin.vo.calibration.CalibrationOverviewVO;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
@@ -61,13 +62,15 @@ public class DataCalibrationServiceImpl implements DataCalibrationService {
         this.runtimeSyncService = runtimeSyncService;
     }
 
-    /** 查询当前试验任务累计检出的野值数量。 */
+    /** 查询当前试验任务累计校准、清洗及野值数量。 */
     @Override
     public CalibrationOverviewVO getOverview(String taskId) {
+        // 第一步：校验必填任务编号，保证累计统计按试验任务隔离。
         requireTaskId(taskId);
-        // 汇总全部未删除校准记录，没有记录时Mapper统一返回零。
-        CalibrationOverviewVO result = new CalibrationOverviewVO();
-        result.setOutlierCount(recordMapper.sumOutlierCount(taskId));
+        // 第二步：一次汇总全部未删除记录，没有记录时由查询统一返回零。
+        CalibrationOverviewVO result = recordMapper.findOverview(taskId);
+        // 第三步：清洗数量直接复用野值数量，保证两个返回字段完全一致。
+        result.setCleanedCount(result.getOutlierCount());
         return result;
     }
 
@@ -166,22 +169,24 @@ public class DataCalibrationServiceImpl implements DataCalibrationService {
         return true;
     }
 
-    /** 查询指定试验任务的校准记录列表。 */
+    /** 分页查询指定任务的校准记录及每个通道的累计校准数量。 */
     @Override
-    public PageResult<CalibRecord> pageCalibRecords(
+    public PageResult<CalibRecordListVO> pageCalibRecords(
             String taskId,
             Integer pageNum,
             Integer pageSize) {
+        // 第一步：校验当前任务及分页参数，保证记录列表按任务隔离。
         requireTaskId(taskId);
         int safePageNum = pageNum == null ? 1 : Math.max(1, pageNum);
         int safePageSize = safePageSize(pageSize);
 
-        // PageHelper 只会分页紧随其后的第一条 MyBatis 查询，二者之间不要插入其他查询。
+        // 第二步：分页查询同时读取已有累计字段，分页组件必须紧邻这条查询。
         PageHelper.startPage(safePageNum, safePageSize);
-        List<CalibRecord> records = recordMapper.findAllByTaskId(taskId);
-        PageInfo<CalibRecord> pageInfo = new PageInfo<>(records);
+        List<CalibRecordListVO> records = recordMapper.findAllByTaskId(taskId);
+        PageInfo<CalibRecordListVO> pageInfo = new PageInfo<>(records);
 
-        return new PageResult<CalibRecord>(
+        // 第三步：沿用分页响应结构，每条记录独立返回当前通道累计校准数量。
+        return new PageResult<CalibRecordListVO>(
                 pageInfo.getPageNum(),
                 pageInfo.getPageSize(),
                 pageInfo.getTotal(),

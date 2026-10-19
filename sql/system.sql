@@ -132,12 +132,13 @@ where u.username = 'admin'
       where ur.user_id = u.id and ur.role_id = r.id
   );
 
--- 数据校准：每个校准通道只对应一条野值汇总记录。
+-- 数据校准：每个校准通道只对应一条校准及野值数量汇总记录。
 CREATE TABLE IF NOT EXISTS calib_record (
     id BIGSERIAL PRIMARY KEY,
     task_id VARCHAR(100) NOT NULL,
     channel_id BIGINT NOT NULL,
     channel_name VARCHAR(100) NOT NULL,
+    calibration_count BIGINT NOT NULL DEFAULT 0,
     outlier_count BIGINT NOT NULL DEFAULT 0,
     is_deleted SMALLINT NOT NULL DEFAULT 0,
     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -149,6 +150,7 @@ COMMENT ON COLUMN calib_record.id IS '自增主键ID';
 COMMENT ON COLUMN calib_record.task_id IS '试验任务ID';
 COMMENT ON COLUMN calib_record.channel_id IS '校准通道ID';
 COMMENT ON COLUMN calib_record.channel_name IS '校准通道名称';
+COMMENT ON COLUMN calib_record.calibration_count IS '累计参与校准的遥测参数数量，包含正常值和野值';
 COMMENT ON COLUMN calib_record.outlier_count IS '累计检出的野值数量';
 COMMENT ON COLUMN calib_record.is_deleted IS '是否删除：0否 1是';
 COMMENT ON COLUMN calib_record.create_time IS '创建时间';
@@ -242,3 +244,6 @@ where administrator.role_key='admin'
 select setval('dp_user_id_seq',(select greatest(coalesce(max(id),0),1) from dp_user));
 select setval('dp_role_id_seq',(select greatest(coalesce(max(id),0),1) from dp_role));
 select setval('dp_menu_id_seq',(select greatest(coalesce(max(id),0),1) from dp_menu));
+
+-- 野值详情按发生时间分批清理，校准汇总保留历史累计数量。
+CREATE INDEX IF NOT EXISTS idx_calib_detail_retention ON calib_record_detail (create_time, id);
